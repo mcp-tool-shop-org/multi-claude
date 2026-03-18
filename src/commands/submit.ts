@@ -1,0 +1,293 @@
+import { Command } from 'commander';
+import { readFileSync } from 'node:fs';
+import { openDb } from '../db/connection.js';
+import { mcfError, ERR } from '../lib/errors.js';
+import { generateId, nowISO } from '../lib/ids.js';
+import type { McfResult } from '../types/common.js';
+import { minimatch } from '../lib/glob.js';
+
+interface ArtifactManifest {
+  files_created: string[];
+  files_modified: string[];
+  files_deleted: string[];
+  test_files: string[];
+  test_results_ref?: string;
+}
+
+interface WritebackStructured {
+  module: string;
+  change_type: string;
+  summary: string;
+  files_touched: string[];
+  contract_delta: string;
+  risks: string[];
+  dependencies_affected: string[];
+  tests_added: string[];
+  docs_required: boolean;
+  architecture_impact: string | null;
+  relationship_suggestions: unknown[];
+}
+
+interface WritebackProse {
+  what_changed: string;
+  why_changed: string;
+  what_to_watch: string;
+  what_affects_next: string;
+}
+
+interface Writeback {
+  writeback: WritebackStructured & { prose: WritebackProse };
+}
+
+interface SeamChange {
+  file: string;
+  change_description: string;
+  priority: string;
+}
+
+export interface SubmitResult {
+  submission_id: string;
+  packet_id: string;
+  attempt_number: number;
+  merge_ready: boolean;
+  contract_delta: string | null;
+  artifacts_count: number;
+  tests_count: number;
+}
+
+function validateArtifactManifest(raw: string): { manifest: ArtifactManifest } | { error: string } {
+  let parsed: unknown;
+  try { parsed = JSON.parse(raw); } catch { return { error: 'Invalid JSON' }; }
+
+  const m = parsed as Record<string, unknown>;
+  if (!Array.isArray(m.files_created)) return { error: 'Missing files_created array' };
+  if (!Array.isArray(m.files_modified)) return { error: 'Missing files_modified array' };
+  if (!Array.isArray(m.files_deleted)) return { error: 'Missing files_deleted array' };
+  if (!Array.isArray(m.test_files)) return { error: 'Missing test_files array' };
+
+  const totalFiles = m.files_created.length + m.files_modified.length;
+  if (totalFiles === 0) return { error: 'No files created or modified' };
+
+  return { manifest: m as unknown as ArtifactManifest };
+}
+
+function validateWriteback(raw: string, required: boolean): { writeback: Writeback } | { error: string } {
+  if (!required) return { writeback: JSON.parse(raw) as Writeback };
+
+  let parsed: unknown;
+  try { parsed = JSON.parse(raw); } catch { return { error: 'Invalid JSON' }; }
+
+  const w = (parsed as Record<string, unknown>).writeback as Record<string, unknown> | undefined;
+  if (!w) return { error: 'Missing writeback object' };
+
+  for (const field of ['module', 'change_type', 'summary']) {
+    if (!w[field] || typeof w[field] !== 'string' || (w[field] as string).trim() === '') {
+      return { error: `Writeback field '${field}' is empty or missing` };
+    }
+  }
+
+  if (!Array.isArray(w.files_touched) || w.files_touched.length === 0) {
+    return { error: 'Writeback files_touched is empty or missing' };
+  }
+
+  const prose = w.prose as Record<string, unknown> | undefined;
+  if (!prose) return { error: 'Missing writeback.prose object' };
+
+  for (const field of ['what_changed', 'why_changed', 'what_to_watch', 'what_affects_next']) {
+    if (!prose[field] || typeof prose[field] !== 'string' || (prose[field] as string).trim() === '') {
+      return { error: `Writeback prose field '${field}' is empty or missing` };
+    }
+  }
+
+  // Reject generic writeback
+  const summary = (w.summary as string).toLowerCase();
+  if (summary === 'implemented the feature' || summary === 'done' || summary.length < 10) {
+    return { error: 'Writeback summary is too generic — describe what actually changed' };
+  }
+
+  return { writeback: parsed as Writeback };
+}
+
+function checkFileAgainstGlobs(file: string, globs: string[]): boolean {
+  return globs.some(glob => minimatch(file, glob));
+}
+
+export function runSubmit(
+  dbPath: string,
+  packetId: string,
+  worker: string,
+  artifactsJson: string,
+  writebackJson: string,
+  mergeReady: boolean,
+  summary: string,
+  patchRef?: string,
+  deltaRef?: string,
+  seamChangesJson?: string,
+  amendmentsApplied?: string[],
+  blockers?: string[],
+): McfResult<SubmitResult> {
+  const db = openDb(dbPath);
+  try {
+    // 1. Verify packet is in_progress
+    const packet = db.prepare(`
+      SELECT packet_id, status, allowed_files, forbidden_files, contract_delta_policy,
+             knowledge_writeback_required, protected_file_access, seam_file_access
+      FROM packets WHERE packet_id = ?
+    `).get(packetId) as {
+      packet_id: string; status: string;
+      allowed_files: string; forbidden_files: string;
+      contract_delta_policy: string; knowledge_writeback_required: number;
+      protected_file_access: string; seam_file_access: string;
+    } | undefined;
+
+    if (!packet) return mcfError('mcf submit', ERR.PACKET_NOT_FOUND, `Packet '${packetId}' not found`, { packet_id: packetId });
+    if (packet.status !== 'in_progress') return mcfError('mcf submit', ERR.PACKET_NOT_IN_PROGRESS, `Packet is '${packet.status}', expected 'in_progress'`, { current_status: packet.status });
+
+    // 2. Verify active claim owned by worker
+    const claim = db.prepare(`
+      SELECT claim_id, attempt_id, claimed_by FROM claims WHERE packet_id = ? AND is_active = 1
+    `).get(packetId) as { claim_id: string; attempt_id: string; claimed_by: string } | undefined;
+
+    if (!claim || claim.claimed_by !== worker) {
+      return mcfError('mcf submit', ERR.NOT_OWNER, `Worker '${worker}' does not own the active claim`, { packet_id: packetId });
+    }
+
+    // 3. Validate artifact manifest
+    const artifactResult = validateArtifactManifest(artifactsJson);
+    if ('error' in artifactResult) {
+      return mcfError('mcf submit', ERR.INVALID_ARTIFACTS, artifactResult.error, { validation_errors: [artifactResult.error] });
+    }
+    const manifest = artifactResult.manifest;
+
+    // 4. Check test requirement
+    if (manifest.test_files.length === 0 && packet.knowledge_writeback_required) {
+      return mcfError('mcf submit', ERR.NO_TESTS, 'No test files in submission — tests are required', {});
+    }
+
+    // 5. Validate writeback
+    const writebackResult = validateWriteback(writebackJson, packet.knowledge_writeback_required === 1);
+    if ('error' in writebackResult) {
+      return mcfError('mcf submit', ERR.INVALID_WRITEBACK, writebackResult.error, { missing_fields: [writebackResult.error] });
+    }
+
+    // 6. Check file scope — all artifact files must be within allowed_files
+    const allowedGlobs = JSON.parse(packet.allowed_files) as string[];
+    const forbiddenGlobs = JSON.parse(packet.forbidden_files) as string[];
+
+    const allFiles = [...manifest.files_created, ...manifest.files_modified, ...manifest.files_deleted];
+
+    if (allowedGlobs.length > 0) {
+      for (const file of allFiles) {
+        if (!checkFileAgainstGlobs(file, allowedGlobs)) {
+          return mcfError('mcf submit', ERR.SCOPE_VIOLATION, `File '${file}' is outside allowed scope`, { file, allowed_globs: allowedGlobs });
+        }
+      }
+    }
+
+    // 7. Check forbidden files
+    for (const file of allFiles) {
+      if (checkFileAgainstGlobs(file, forbiddenGlobs)) {
+        return mcfError('mcf submit', ERR.FORBIDDEN_FILE_TOUCHED, `File '${file}' matches forbidden pattern`, { file });
+      }
+    }
+
+    // 8. Contract delta check
+    if (packet.contract_delta_policy === 'none' && deltaRef) {
+      return mcfError('mcf submit', ERR.SCOPE_VIOLATION, 'Packet policy is "none" but a contract delta was declared', { policy: 'none', delta_ref: deltaRef });
+    }
+
+    // 9. Get attempt number for submission ID
+    const attempt = db.prepare('SELECT attempt_number FROM packet_attempts WHERE attempt_id = ?').get(claim.attempt_id) as { attempt_number: number };
+
+    const now = nowISO();
+    const submissionId = `${packetId}--sub-${attempt.attempt_number}`;
+
+    // 10. Atomic submission
+    db.transaction(() => {
+      db.prepare(`
+        INSERT INTO packet_submissions (
+          submission_id, packet_id, attempt_id, submitted_by, submitted_at,
+          patch_ref, artifact_manifest, contract_delta_ref, writeback,
+          seam_changes, amendments_applied, declared_merge_ready, merge_blockers, builder_summary
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        submissionId, packetId, claim.attempt_id, worker, now,
+        patchRef ?? null,
+        artifactsJson,
+        deltaRef ?? null,
+        writebackJson,
+        seamChangesJson ?? null,
+        amendmentsApplied ? JSON.stringify(amendmentsApplied) : null,
+        mergeReady ? 1 : 0,
+        blockers ? JSON.stringify(blockers) : null,
+        summary,
+      );
+
+      // Close attempt
+      db.prepare(`UPDATE packet_attempts SET ended_at = ?, end_reason = 'submitted' WHERE attempt_id = ?`).run(now, claim.attempt_id);
+
+      // Release claim
+      db.prepare(`UPDATE claims SET is_active = 0, released_at = ?, release_reason = 'submitted' WHERE claim_id = ?`).run(now, claim.claim_id);
+
+      // Update packet status
+      db.prepare(`UPDATE packets SET status = 'submitted', updated_at = ? WHERE packet_id = ?`).run(now, packetId);
+
+      // Log transition
+      db.prepare(`
+        INSERT INTO state_transition_log (transition_id, entity_type, entity_id, from_state, to_state, actor_type, actor_id, reason, created_at)
+        VALUES (?, 'packet', ?, 'in_progress', 'submitted', 'builder', ?, 'submission complete', ?)
+      `).run(generateId('tr'), packetId, worker, now);
+    })();
+
+    return {
+      ok: true,
+      command: 'mcf submit',
+      result: {
+        submission_id: submissionId,
+        packet_id: packetId,
+        attempt_number: attempt.attempt_number,
+        merge_ready: mergeReady,
+        contract_delta: deltaRef ?? null,
+        artifacts_count: allFiles.length,
+        tests_count: manifest.test_files.length,
+      },
+      transitions: [{ entity_type: 'packet', entity_id: packetId, from_state: 'in_progress', to_state: 'submitted' }],
+    };
+  } finally {
+    db.close();
+  }
+}
+
+export function submitCommand(): Command {
+  const cmd = new Command('submit')
+    .description('Submit packet output for verification')
+    .requiredOption('--packet <id>', 'Packet ID')
+    .requiredOption('--worker <name>', 'Worker identity')
+    .requiredOption('--artifacts <path>', 'Path to JSON artifact manifest')
+    .requiredOption('--writeback <path>', 'Path to JSON writeback object')
+    .requiredOption('--summary <text>', 'Builder summary')
+    .option('--patch-ref <ref>', 'Path to diff/patch or branch reference')
+    .option('--delta <id>', 'Contract delta ID')
+    .option('--seam-changes <path>', 'Path to JSON seam change declarations')
+    .option('--amendments <ids...>', 'Amendment IDs applied')
+    .option('--merge-ready', 'Declare merge ready', false)
+    .option('--no-merge-ready', 'Declare NOT merge ready')
+    .option('--blockers <reasons...>', 'Merge blockers')
+    .option('--db-path <path>', 'DB path', '.mcf/execution.db')
+    .action((opts) => {
+      const artifactsJson = readFileSync(opts.artifacts, 'utf-8');
+      const writebackJson = readFileSync(opts.writeback, 'utf-8');
+      const seamChangesJson = opts.seamChanges ? readFileSync(opts.seamChanges, 'utf-8') : undefined;
+      const result = runSubmit(
+        opts.dbPath, opts.packet, opts.worker,
+        artifactsJson, writebackJson,
+        opts.mergeReady, opts.summary,
+        opts.patchRef, opts.delta, seamChangesJson,
+        opts.amendments, opts.blockers,
+      );
+      console.log(JSON.stringify(result, null, 2));
+      if (!result.ok) process.exit(1);
+    });
+
+  return cmd;
+}
