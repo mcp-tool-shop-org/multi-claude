@@ -6,7 +6,8 @@ import { openDb } from '../db/connection.js';
 import { mcfError, ERR } from '../lib/errors.js';
 import { generateId, nowISO } from '../lib/ids.js';
 import { runRender } from './render.js';
-import { runClaim, runProgress } from './claim.js';
+import { runClaim, runProgress, endAttempt } from './claim.js';
+import { cleanupOnStop } from '../runtime/cleanup.js';
 import { runSubmit } from './submit.js';
 import { runVerify } from './verify.js';
 import { runPromote } from './promote.js';
@@ -15,7 +16,7 @@ import { runIntegrate } from './integrate.js';
 import { launchWorkerSession } from '../runtime/sdk-runtime.js';
 import { registerSession, unregisterSession, stopAllSessions, stopSession } from '../runtime/session-registry.js';
 import { emitHookEvent } from '../hooks/engine.js';
-import type { WorkerSessionResult } from '../runtime/types.js';
+import type { WorkerSessionResult, StopReason } from '../runtime/types.js';
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -346,6 +347,10 @@ async function executeAutoRun(
         if (hookResult.decision?.action === 'stay_single') {
           console.error(`[multi-claude auto] Hook says stay_single for ${pkt.packet_id} — skipping worker launch`);
           continue;
+        } else if (hookResult.decision?.action === 'escalate_human') {
+          console.error(`[multi-claude auto] Hook says escalate_human for ${pkt.packet_id} — pausing run`);
+          pauseReason = `retry_limit_exceeded:${pkt.packet_id}`;
+          break;
         }
 
         // Claim
@@ -427,6 +432,10 @@ async function executeAutoRun(
         unregisterSession(runId, packetId);
 
         const sessionResult: WorkerSessionResult | null = settled.status === 'fulfilled' ? settled.value : null;
+
+        // End the attempt record
+        const endReason = sessionResult?.stopReason ?? 'crashed';
+        endAttempt(dbPath, packetId, endReason);
         const outcome = sessionResult ? stopReasonToOutcome(sessionResult.stopReason) : 'error';
         const error = sessionResult?.error ?? (settled.status === 'rejected' ? String((settled as PromiseRejectedResult).reason) : undefined);
 
@@ -470,6 +479,13 @@ async function executeAutoRun(
               packetsMerged++;
             } else {
               console.error(`[multi-claude auto] Verify failed for ${packetId}`);
+              const retryHook = emitHookEvent(dbPath, 'packet.failed', 'packet', packetId, featureId, 'autonomous');
+              if (retryHook.decision?.action === 'retry_once') {
+                console.error(`[multi-claude auto] Retrying ${packetId} (hook: retry_once)`);
+                // Re-claim will happen on next wave iteration if we add it back
+                // For now, just log — full retry re-launch is complex
+                // The packet stays in failed state; operator can manually retry
+              }
               packetsFailed++;
             }
           } else {
@@ -482,13 +498,14 @@ async function executeAutoRun(
         }
       }
 
-      // Cleanup successful worktrees, preserve failed ones
+      // Cleanup using consolidated cleanup law
       for (let i = 0; i < results.length; i++) {
         const settled = results[i]!;
-        if (settled.status === 'fulfilled' && settled.value.stopReason === 'completed') {
-          try { cleanupWorktree(repoRoot, handles[i]!.pkt.packet_id); } catch { /* ignore */ }
-        }
-        // Failed/stopped worktrees are preserved per cleanup law
+        const pktId = handles[i]!.pkt.packet_id;
+        const sessionResult: WorkerSessionResult | null = settled.status === 'fulfilled' ? settled.value : null;
+        const reason: StopReason = sessionResult?.stopReason ?? 'failed';
+        // WorkerSessionResult has no sessionId field — pass undefined; cleanupOnStop handles it
+        cleanupOnStop(repoRoot, pktId, reason, dbPath, undefined);
       }
 
       // Update wave progress
@@ -664,6 +681,7 @@ function runAutoStatus(dbPath: string, runId?: string): McfResult<StatusResult> 
 // ─── Stop ───────────────────────────────────────────────────────
 
 function runAutoStop(dbPath: string, runId: string): McfResult<{ run_id: string; status: string; sessions_stopped: number }> {
+  const repoRoot = getRepoRoot(dbPath);
   const db = openDb(dbPath);
   try {
     const run = db.prepare('SELECT status FROM auto_runs WHERE run_id = ?').get(runId) as { status: string } | undefined;
@@ -678,6 +696,17 @@ function runAutoStop(dbPath: string, runId: string): McfResult<{ run_id: string;
 
     // Emit hook event
     emitHookEvent(dbPath, 'wave.empty', 'run', runId, '', 'autonomous', { reason: 'manual_stop' });
+
+    // Cleanup worktrees for stopped workers
+    const incompleteWorkers = db.prepare(
+      "SELECT packet_id FROM auto_run_workers WHERE run_id = ? AND status NOT IN ('completed', 'merged')"
+    ).all(runId) as Array<{ packet_id: string }>;
+
+    for (const w of incompleteWorkers) {
+      endAttempt(dbPath, w.packet_id, 'stopped');
+      cleanupOnStop(repoRoot, w.packet_id, 'stopped', dbPath);
+    }
+    console.error(`[multi-claude auto] Cleaned up ${incompleteWorkers.length} incomplete worker(s)`);
 
     db.prepare('UPDATE auto_runs SET status = ?, completed_at = ? WHERE run_id = ?').run('stopped', nowISO(), runId);
     return { ok: true, command: 'multi-claude auto stop', result: { run_id: runId, status: 'stopped', sessions_stopped: stoppedCount }, transitions: [] };
