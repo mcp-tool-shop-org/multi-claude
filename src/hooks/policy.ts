@@ -147,7 +147,7 @@ export const POLICY_RULES: PolicyRule[] = [
       if (c.failureClass !== 'deterministic') return null;
       if (c.retryCount < MAX_RETRIES) return null;
       return makeDecision(
-        'escalate_human' as HookAction,
+        'escalate',
         [e.entityId],
         'operator',
         `Deterministic failure after ${MAX_RETRIES} retries — escalate to human`,

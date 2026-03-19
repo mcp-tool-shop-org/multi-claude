@@ -211,14 +211,14 @@ describe('Policy Rules', () => {
   });
 
   describe('Rule 4c: Escalate after retry limit', () => {
-    it('fires escalate_human when retryCount >= MAX_RETRIES', () => {
+    it('fires escalate when retryCount >= MAX_RETRIES', () => {
       const rule = POLICY_RULES.find(r => r.id === 'rule_4c_retry_limit')!;
       expect(rule).toBeDefined();
       const event = makeEvent('packet.failed', 'pkt-1');
       const cond = makeConditions({ failureClass: 'deterministic', retryCount: MAX_RETRIES });
       const decision = rule.evaluate(cond, event);
       expect(decision).not.toBeNull();
-      expect(decision!.action).toBe('escalate_human');
+      expect(decision!.action).toBe('escalate');
       expect(decision!.role).toBe('operator');
       expect(decision!.reason).toContain(`${MAX_RETRIES} retries`);
     });

@@ -206,7 +206,7 @@ describe('Retry limit enforcement (policy integration)', () => {
     const cond = makeConditions({ failureClass: 'deterministic', retryCount: MAX_RETRIES });
     const decision = rule4c.evaluate(cond, event);
     expect(decision).not.toBeNull();
-    expect(decision!.action).toBe('escalate_human');
+    expect(decision!.action).toBe('escalate');
     expect(decision!.reason).toContain(`${MAX_RETRIES} retries`);
   });
 
