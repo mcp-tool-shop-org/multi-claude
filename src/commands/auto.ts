@@ -347,7 +347,7 @@ async function executeAutoRun(
         if (hookResult.decision?.action === 'stay_single') {
           console.error(`[multi-claude auto] Hook says stay_single for ${pkt.packet_id} — skipping worker launch`);
           continue;
-        } else if (hookResult.decision?.action === 'escalate_human') {
+        } else if (hookResult.decision?.action === 'escalate') {
           console.error(`[multi-claude auto] Hook says escalate_human for ${pkt.packet_id} — pausing run`);
           pauseReason = `retry_limit_exceeded:${pkt.packet_id}`;
           break;
