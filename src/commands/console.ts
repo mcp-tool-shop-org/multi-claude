@@ -28,6 +28,7 @@ import {
   rejectSubcommand,
   approvalSubcommand,
 } from './console-approval.js';
+import { exportSubcommand } from './console-export.js';
 import type { RunModel } from '../console/run-model.js';
 import type { HookFeedResult } from '../console/hook-feed.js';
 import type { FitnessViewResult } from '../console/fitness-view.js';
@@ -222,6 +223,9 @@ export function consoleCommand(): Command {
 
   // ── approval: current approval status ─────────────────────────
   cmd.addCommand(approvalSubcommand());
+
+  // ── export: downstream integration ────────────────────────────
+  cmd.addCommand(exportSubcommand());
 
   // ── watch: auto-refresh console ───────────────────────────────
   cmd.command('watch')
