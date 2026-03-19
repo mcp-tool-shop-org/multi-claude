@@ -15,6 +15,7 @@ import { expireCommand } from '../src/commands/expire.js';
 import { autoCommand } from '../src/commands/auto.js';
 import { validateOutputCommand } from '../src/commands/validate-output.js';
 import { hooksCommand } from '../src/commands/hooks.js';
+import { fitnessCommand } from '../src/commands/fitness.js';
 
 const program = new Command();
 
@@ -39,5 +40,6 @@ program.addCommand(expireCommand());
 program.addCommand(autoCommand());
 program.addCommand(validateOutputCommand());
 program.addCommand(hooksCommand());
+program.addCommand(fitnessCommand());
 
 program.parse();
