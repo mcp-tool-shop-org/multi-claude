@@ -57,26 +57,26 @@ export function runClaim(
       } | undefined;
 
       if (!packet) {
-        return mcfError('mcf claim', ERR.PACKET_NOT_FOUND, `Packet '${packetId}' not found`, { packet_id: packetId });
+        return mcfError('multi-claude claim', ERR.PACKET_NOT_FOUND, `Packet '${packetId}' not found`, { packet_id: packetId });
       }
       if (isPacketTerminal(packet.status)) {
-        return mcfError('mcf claim', ERR.TERMINAL_STATE, `Packet '${packetId}' is in terminal state '${packet.status}'`, { packet_id: packetId, current_status: packet.status });
+        return mcfError('multi-claude claim', ERR.TERMINAL_STATE, `Packet '${packetId}' is in terminal state '${packet.status}'`, { packet_id: packetId, current_status: packet.status });
       }
       if (packet.status !== 'ready') {
-        return mcfError('mcf claim', ERR.PACKET_NOT_READY, `Packet '${packetId}' status is '${packet.status}', expected 'ready'`, { packet_id: packetId, current_status: packet.status });
+        return mcfError('multi-claude claim', ERR.PACKET_NOT_READY, `Packet '${packetId}' status is '${packet.status}', expected 'ready'`, { packet_id: packetId, current_status: packet.status });
       }
 
-      // 2. Verify all hard dependencies are merged
+      // 2. Verify all hard dependencies are satisfied (verified, integrating, or merged)
       const unmetDeps = db.prepare(`
         SELECT pd.depends_on_packet_id, p.status
         FROM packet_dependencies pd
         JOIN packets p ON p.packet_id = pd.depends_on_packet_id
-        WHERE pd.packet_id = ? AND pd.dependency_type = 'hard' AND p.status != 'merged'
+        WHERE pd.packet_id = ? AND pd.dependency_type = 'hard' AND p.status NOT IN ('verified', 'integrating', 'merged')
       `).all(packetId) as Array<{ depends_on_packet_id: string; status: string }>;
 
       if (unmetDeps.length > 0) {
-        return mcfError('mcf claim', ERR.DEPENDENCIES_NOT_MET,
-          `${unmetDeps.length} hard dependencies not merged`,
+        return mcfError('multi-claude claim', ERR.DEPENDENCIES_NOT_MET,
+          `${unmetDeps.length} hard dependencies not satisfied (need verified, integrating, or merged)`,
           { unmet: unmetDeps.map(d => ({ packet_id: d.depends_on_packet_id, status: d.status })) },
         );
       }
@@ -88,7 +88,7 @@ export function runClaim(
       `).get(packetId) as { claim_id: string; claimed_by: string; lease_expires_at: string } | undefined;
 
       if (activeClaim) {
-        return mcfError('mcf claim', ERR.ALREADY_CLAIMED,
+        return mcfError('multi-claude claim', ERR.ALREADY_CLAIMED,
           `Packet '${packetId}' is already claimed by '${activeClaim.claimed_by}'`,
           { claim_id: activeClaim.claim_id, claimed_by: activeClaim.claimed_by, lease_expires_at: activeClaim.lease_expires_at },
         );
@@ -97,7 +97,7 @@ export function runClaim(
       // 4. Verify role conflict matrix
       const conflict = checkRoleConflict(db, packetId, packet.feature_id, worker, packet.role);
       if (conflict) {
-        return mcfError('mcf claim', ERR.ROLE_CONFLICT,
+        return mcfError('multi-claude claim', ERR.ROLE_CONFLICT,
           conflict.conflicting_claim,
           { conflict_type: conflict.conflict_type, conflicting_claim: conflict.conflicting_claim },
         );
@@ -155,7 +155,7 @@ export function runClaim(
 
       return {
         ok: true as const,
-        command: 'mcf claim',
+        command: 'multi-claude claim',
         result: {
           claim_id: claimId,
           packet_id: packetId,
@@ -189,10 +189,10 @@ export function runProgress(
   try {
     const packet = db.prepare('SELECT status FROM packets WHERE packet_id = ?').get(packetId) as { status: string } | undefined;
     if (!packet) {
-      return mcfError('mcf progress', ERR.PACKET_NOT_FOUND, `Packet '${packetId}' not found`, { packet_id: packetId });
+      return mcfError('multi-claude progress', ERR.PACKET_NOT_FOUND, `Packet '${packetId}' not found`, { packet_id: packetId });
     }
     if (packet.status !== 'claimed') {
-      return mcfError('mcf progress', ERR.PACKET_NOT_CLAIMED, `Packet '${packetId}' is '${packet.status}', expected 'claimed'`, { packet_id: packetId, current_status: packet.status });
+      return mcfError('multi-claude progress', ERR.PACKET_NOT_CLAIMED, `Packet '${packetId}' is '${packet.status}', expected 'claimed'`, { packet_id: packetId, current_status: packet.status });
     }
 
     const activeClaim = db.prepare(`
@@ -200,7 +200,7 @@ export function runProgress(
     `).get(packetId) as { claim_id: string; claimed_by: string } | undefined;
 
     if (!activeClaim || activeClaim.claimed_by !== worker) {
-      return mcfError('mcf progress', ERR.NOT_OWNER, `Worker '${worker}' does not own the active claim`, { packet_id: packetId });
+      return mcfError('multi-claude progress', ERR.NOT_OWNER, `Worker '${worker}' does not own the active claim`, { packet_id: packetId });
     }
 
     const now = nowISO();
@@ -215,7 +215,7 @@ export function runProgress(
 
     return {
       ok: true,
-      command: 'mcf progress',
+      command: 'multi-claude progress',
       result: { packet_id: packetId, status: 'in_progress' },
       transitions: [{ entity_type: 'packet', entity_id: packetId, from_state: 'claimed', to_state: 'in_progress' }],
     };
@@ -233,7 +233,7 @@ export function claimCommand(): Command {
     .option('--model <name>', 'Model name (opus/sonnet/haiku)')
     .option('--branch <name>', 'Git branch')
     .option('--worktree <path>', 'Worktree path')
-    .option('--db-path <path>', 'DB path', '.mcf/execution.db')
+    .option('--db-path <path>', 'DB path', '.multi-claude/execution.db')
     .action((opts) => {
       const result = runClaim(opts.dbPath, opts.packet, opts.worker, opts.session, opts.model, opts.branch, opts.worktree);
       console.log(JSON.stringify(result, null, 2));
@@ -248,7 +248,7 @@ export function progressCommand(): Command {
     .description('Move a claimed packet to in_progress')
     .requiredOption('--packet <id>', 'Packet ID')
     .requiredOption('--worker <name>', 'Worker identity')
-    .option('--db-path <path>', 'DB path', '.mcf/execution.db')
+    .option('--db-path <path>', 'DB path', '.multi-claude/execution.db')
     .action((opts) => {
       const result = runProgress(opts.dbPath, opts.packet, opts.worker);
       console.log(JSON.stringify(result, null, 2));

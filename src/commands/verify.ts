@@ -38,10 +38,10 @@ export function runVerify(
     `).get(packetId) as { packet_id: string; status: string; rule_profile: string } | undefined;
 
     if (!packet) {
-      return mcfError('mcf verify', ERR.PACKET_NOT_FOUND, `Packet '${packetId}' not found`, { packet_id: packetId });
+      return mcfError('multi-claude verify', ERR.PACKET_NOT_FOUND, `Packet '${packetId}' not found`, { packet_id: packetId });
     }
     if (packet.status !== 'submitted' && packet.status !== 'verifying') {
-      return mcfError('mcf verify', ERR.PACKET_NOT_SUBMITTED, `Packet is '${packet.status}', expected 'submitted' or 'verifying'`, { packet_id: packetId, current_status: packet.status });
+      return mcfError('multi-claude verify', ERR.PACKET_NOT_SUBMITTED, `Packet is '${packet.status}', expected 'submitted' or 'verifying'`, { packet_id: packetId, current_status: packet.status });
     }
 
     // 2. Find the submission
@@ -53,12 +53,12 @@ export function runVerify(
     `).get(packetId) as { submission_id: string; attempt_id: string; submitted_by: string } | undefined;
 
     if (!submission) {
-      return mcfError('mcf verify', ERR.SUBMISSION_NOT_FOUND, `No submission found for packet '${packetId}'`, { packet_id: packetId });
+      return mcfError('multi-claude verify', ERR.SUBMISSION_NOT_FOUND, `No submission found for packet '${packetId}'`, { packet_id: packetId });
     }
 
     // 3. Verify independence: verifier != builder
     if (verifier === submission.submitted_by) {
-      return mcfError('mcf verify', ERR.INDEPENDENCE_VIOLATION, `Verifier '${verifier}' is the same as builder '${submission.submitted_by}'`, { verifier, builder: submission.submitted_by });
+      return mcfError('multi-claude verify', ERR.INDEPENDENCE_VIOLATION, `Verifier '${verifier}' is the same as builder '${submission.submitted_by}'`, { verifier, builder: submission.submitted_by });
     }
 
     // 4. If verifier-analysis: require prior checklist failure
@@ -71,7 +71,7 @@ export function runVerify(
       `).get(packetId) as { verification_result_id: string; status: string } | undefined;
 
       if (!priorChecklist) {
-        return mcfError('mcf verify', ERR.CHECKLIST_REQUIRED_FIRST, 'Verifier-analysis requires a prior checklist failure', { packet_id: packetId });
+        return mcfError('multi-claude verify', ERR.CHECKLIST_REQUIRED_FIRST, 'Verifier-analysis requires a prior checklist failure', { packet_id: packetId });
       }
     }
 
@@ -80,7 +80,7 @@ export function runVerify(
     try {
       checks = JSON.parse(checksJson) as Record<string, boolean>;
     } catch {
-      return mcfError('mcf verify', ERR.INVALID_CHECKS, 'Checks JSON is invalid', {});
+      return mcfError('multi-claude verify', ERR.INVALID_CHECKS, 'Checks JSON is invalid', {});
     }
 
     // Count pass/fail
@@ -90,16 +90,16 @@ export function runVerify(
 
     // 6. Verdict consistency checks
     if (verdict === 'pass' && failed > 0) {
-      return mcfError('mcf verify', ERR.VERDICT_MISMATCH, `Verdict is 'pass' but ${failed} checks failed`, { checks_failed: failed });
+      return mcfError('multi-claude verify', ERR.VERDICT_MISMATCH, `Verdict is 'pass' but ${failed} checks failed`, { checks_failed: failed });
     }
     if (verdict === 'fail' && !failuresJson) {
-      return mcfError('mcf verify', ERR.MISSING_FAILURES, 'Fail verdict requires failure details', {});
+      return mcfError('multi-claude verify', ERR.MISSING_FAILURES, 'Fail verdict requires failure details', {});
     }
     if (verifierRole === 'verifier-analysis' && verdict === 'fail' && !analysisJson) {
-      return mcfError('mcf verify', ERR.MISSING_ANALYSIS, 'Verifier-analysis failure requires analysis and retry recommendation', {});
+      return mcfError('multi-claude verify', ERR.MISSING_ANALYSIS, 'Verifier-analysis failure requires analysis and retry recommendation', {});
     }
     if (verifierRole === 'verifier-analysis' && verdict === 'fail' && !retryRecommendation) {
-      return mcfError('mcf verify', ERR.MISSING_ANALYSIS, 'Verifier-analysis failure requires retry recommendation', {});
+      return mcfError('multi-claude verify', ERR.MISSING_ANALYSIS, 'Verifier-analysis failure requires retry recommendation', {});
     }
 
     // 7. Determine target packet state
@@ -151,7 +151,7 @@ export function runVerify(
 
     return {
       ok: true,
-      command: 'mcf verify',
+      command: 'multi-claude verify',
       result: {
         verification_result_id: verificationId,
         packet_id: packetId,
@@ -180,7 +180,7 @@ export function verifyCommand(): Command {
     .option('--failures <path>', 'Path to JSON failure details')
     .option('--analysis <path>', 'Path to JSON failure analysis')
     .option('--retry-recommendation <rec>', 'retry / amend / supersede / escalate')
-    .option('--db-path <path>', 'DB path', '.mcf/execution.db')
+    .option('--db-path <path>', 'DB path', '.multi-claude/execution.db')
     .action((opts) => {
       const checksJson = readFileSync(opts.checks, 'utf-8');
       const failuresJson = opts.failures ? readFileSync(opts.failures, 'utf-8') : undefined;

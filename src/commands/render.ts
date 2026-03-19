@@ -17,6 +17,8 @@ interface PacketRow {
   context: string | null;
   allowed_files: string;
   forbidden_files: string;
+  forbidden_rationale: string;
+  reference_files: string;
   module_family: string | null;
   protected_file_access: string;
   seam_file_access: string;
@@ -55,7 +57,7 @@ export function runRender(dbPath: string, packetId: string): McfResult<{ markdow
   try {
     const packet = db.prepare('SELECT * FROM packets WHERE packet_id = ?').get(packetId) as PacketRow | undefined;
     if (!packet) {
-      return mcfError('mcf render', ERR.PACKET_NOT_FOUND, `Packet '${packetId}' not found`, { packet_id: packetId });
+      return mcfError('multi-claude render', ERR.PACKET_NOT_FOUND, `Packet '${packetId}' not found`, { packet_id: packetId });
     }
 
     // Get feature info
@@ -94,6 +96,8 @@ export function runRender(dbPath: string, packetId: string): McfResult<{ markdow
     // Parse JSON fields
     const allowedFiles = JSON.parse(packet.allowed_files) as string[];
     const forbiddenFiles = JSON.parse(packet.forbidden_files) as string[];
+    const forbiddenRationale = JSON.parse(packet.forbidden_rationale ?? '{}') as Record<string, string>;
+    const referenceFiles = JSON.parse(packet.reference_files ?? '[]') as string[];
     const criteria = packet.acceptance_criteria ? JSON.parse(packet.acceptance_criteria) as string[] : [];
 
     // Build markdown
@@ -150,6 +154,16 @@ export function runRender(dbPath: string, packetId: string): McfResult<{ markdow
       lines.push('### Forbidden files');
       lines.push('');
       for (const f of forbiddenFiles) {
+        const rationale = forbiddenRationale[f];
+        lines.push(rationale ? `- \`${f}\` — ${rationale}` : `- \`${f}\``);
+      }
+      lines.push('');
+    }
+
+    if (referenceFiles.length > 0) {
+      lines.push('### Reference files (prior art / pattern hints)');
+      lines.push('');
+      for (const f of referenceFiles) {
         lines.push(`- \`${f}\``);
       }
       lines.push('');
@@ -247,13 +261,13 @@ export function runRender(dbPath: string, packetId: string): McfResult<{ markdow
     }
 
     lines.push('---');
-    lines.push(`_Rendered from MCF execution DB at ${new Date().toISOString()}_`);
+    lines.push(`_Rendered from multi-claude execution DB at ${new Date().toISOString()}_`);
 
     const markdown = lines.join('\n');
 
     return {
       ok: true,
-      command: 'mcf render',
+      command: 'multi-claude render',
       result: { markdown },
       transitions: [],
     };
@@ -267,7 +281,7 @@ export function renderCommand(): Command {
     .description('Render a packet as markdown handoff')
     .requiredOption('--packet <id>', 'Packet ID')
     .option('--output <path>', 'Output file path (default: stdout)')
-    .option('--db-path <path>', 'DB path', '.mcf/execution.db')
+    .option('--db-path <path>', 'DB path', '.multi-claude/execution.db')
     .action((opts) => {
       const result = runRender(opts.dbPath, opts.packet);
       if (!result.ok) {
@@ -276,7 +290,7 @@ export function renderCommand(): Command {
       }
       if (opts.output) {
         writeFileSync(opts.output, result.result.markdown, 'utf-8');
-        console.log(JSON.stringify({ ok: true, command: 'mcf render', result: { path: opts.output } }, null, 2));
+        console.log(JSON.stringify({ ok: true, command: 'multi-claude render', result: { path: opts.output } }, null, 2));
       } else {
         console.log(result.result.markdown);
       }

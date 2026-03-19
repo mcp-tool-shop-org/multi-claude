@@ -71,7 +71,7 @@ export function runIntegrate(
     } else if (action === 'fail') {
       return failFn(db, featureId, integrator);
     }
-    return mcfError('mcf integrate', ERR.INVALID_STATE, `Unknown action: ${action}`, {});
+    return mcfError('multi-claude integrate', ERR.INVALID_STATE, `Unknown action: ${action}`, {});
   } finally {
     db.close();
   }
@@ -85,9 +85,9 @@ function prepareFn(
 ): McfResult<IntegratePrepareResult> {
   // 1. Verify feature exists
   const feature = db.prepare('SELECT feature_id, status, merge_target FROM features WHERE feature_id = ?').get(featureId) as { feature_id: string; status: string; merge_target: string } | undefined;
-  if (!feature) return mcfError('mcf integrate', ERR.FEATURE_NOT_FOUND, `Feature '${featureId}' not found`, {});
+  if (!feature) return mcfError('multi-claude integrate', ERR.FEATURE_NOT_FOUND, `Feature '${featureId}' not found`, {});
   if (feature.status !== 'in_progress' && feature.status !== 'verifying') {
-    return mcfError('mcf integrate', ERR.INVALID_STATE, `Feature is '${feature.status}', expected 'in_progress' or 'verifying'`, { current_status: feature.status });
+    return mcfError('multi-claude integrate', ERR.INVALID_STATE, `Feature is '${feature.status}', expected 'in_progress' or 'verifying'`, { current_status: feature.status });
   }
 
   // 2. Verify all merge-relevant packets are verified
@@ -97,7 +97,7 @@ function prepareFn(
   `).all(featureId) as Array<{ packet_id: string; status: string }>;
 
   if (unreadyPackets.length > 0) {
-    return mcfError('mcf integrate', ERR.PACKETS_NOT_READY,
+    return mcfError('multi-claude integrate', ERR.PACKETS_NOT_READY,
       `${unreadyPackets.length} packets are not verified`,
       { unready: unreadyPackets },
     );
@@ -112,7 +112,7 @@ function prepareFn(
   `).all(featureId, integrator) as Array<{ started_by: string; packet_id: string }>;
 
   if (builtByIntegrator.length > 0) {
-    return mcfError('mcf integrate', ERR.INDEPENDENCE_VIOLATION,
+    return mcfError('multi-claude integrate', ERR.INDEPENDENCE_VIOLATION,
       `Integrator '${integrator}' built packets in this feature`,
       { built_packets: builtByIntegrator.map(r => r.packet_id) },
     );
@@ -131,7 +131,7 @@ function prepareFn(
   `).all(featureId) as Array<{ packet_id: string }>;
 
   if (missingPromotions.length > 0) {
-    return mcfError('mcf integrate', ERR.MISSING_PROMOTIONS,
+    return mcfError('multi-claude integrate', ERR.MISSING_PROMOTIONS,
       `${missingPromotions.length} packets missing knowledge promotions`,
       { missing: missingPromotions.map(r => r.packet_id) },
     );
@@ -145,7 +145,7 @@ function prepareFn(
   `).get(featureId) as { approval_id: string } | undefined;
 
   if (!mergeApproval) {
-    return mcfError('mcf integrate', ERR.NO_MERGE_APPROVAL, 'Feature merge not approved by human', { feature_id: featureId });
+    return mcfError('multi-claude integrate', ERR.NO_MERGE_APPROVAL, 'Feature merge not approved by human', { feature_id: featureId });
   }
 
   // 6. Verify merge target consistency
@@ -156,7 +156,7 @@ function prepareFn(
 
   const effectiveTargets = new Set(packetTargets.map(p => p.merge_target ?? feature.merge_target));
   if (effectiveTargets.size > 1) {
-    return mcfError('mcf integrate', ERR.TARGET_MISMATCH,
+    return mcfError('multi-claude integrate', ERR.TARGET_MISMATCH,
       'Packets resolve to different merge targets',
       { targets: Array.from(effectiveTargets) },
     );
@@ -200,7 +200,7 @@ function prepareFn(
 
   return {
     ok: true,
-    command: 'mcf integrate --action prepare',
+    command: 'multi-claude integrate --action prepare',
     result: {
       integration_run_id: runId,
       feature_id: featureId,
@@ -224,8 +224,8 @@ function executeFn(
     ORDER BY started_at DESC LIMIT 1
   `).get(featureId) as { integration_run_id: string; status: string; packets_included: string; started_by: string } | undefined;
 
-  if (!run) return mcfError('mcf integrate', ERR.INVALID_RUN_STATE, 'No preparing integration run found', { feature_id: featureId });
-  if (run.started_by !== integrator) return mcfError('mcf integrate', ERR.NOT_OWNER, 'Integrator mismatch', { expected: run.started_by, actual: integrator });
+  if (!run) return mcfError('multi-claude integrate', ERR.INVALID_RUN_STATE, 'No preparing integration run found', { feature_id: featureId });
+  if (run.started_by !== integrator) return mcfError('multi-claude integrate', ERR.NOT_OWNER, 'Integrator mismatch', { expected: run.started_by, actual: integrator });
 
   const packetIds = JSON.parse(run.packets_included) as string[];
   const now = nowISO();
@@ -244,7 +244,7 @@ function executeFn(
 
   return {
     ok: true,
-    command: 'mcf integrate --action execute',
+    command: 'multi-claude integrate --action execute',
     result: { integration_run_id: run.integration_run_id, status: 'integrating', packets_moved: packetIds.length },
     transitions: packetIds.map(id => ({ entity_type: 'packet' as const, entity_id: id, from_state: 'verified', to_state: 'integrating' })),
   };
@@ -261,8 +261,8 @@ function completeFn(
     ORDER BY started_at DESC LIMIT 1
   `).get(featureId) as { integration_run_id: string; status: string; packets_included: string; started_by: string } | undefined;
 
-  if (!run) return mcfError('mcf integrate', ERR.INVALID_RUN_STATE, 'No integrating run found', { feature_id: featureId });
-  if (run.started_by !== integrator) return mcfError('mcf integrate', ERR.NOT_OWNER, 'Integrator mismatch', {});
+  if (!run) return mcfError('multi-claude integrate', ERR.INVALID_RUN_STATE, 'No integrating run found', { feature_id: featureId });
+  if (run.started_by !== integrator) return mcfError('multi-claude integrate', ERR.NOT_OWNER, 'Integrator mismatch', {});
 
   const packetIds = JSON.parse(run.packets_included) as string[];
   const now = nowISO();
@@ -300,7 +300,7 @@ function completeFn(
 
   return {
     ok: true,
-    command: 'mcf integrate --action complete',
+    command: 'multi-claude integrate --action complete',
     result: {
       integration_run_id: run.integration_run_id,
       feature_id: featureId,
@@ -326,7 +326,7 @@ function failFn(
     ORDER BY started_at DESC LIMIT 1
   `).get(featureId) as { integration_run_id: string; status: string; packets_included: string; started_by: string } | undefined;
 
-  if (!run) return mcfError('mcf integrate', ERR.INVALID_RUN_STATE, 'No integrating run found', { feature_id: featureId });
+  if (!run) return mcfError('multi-claude integrate', ERR.INVALID_RUN_STATE, 'No integrating run found', { feature_id: featureId });
 
   const packetIds = JSON.parse(run.packets_included) as string[];
   const now = nowISO();
@@ -353,7 +353,7 @@ function failFn(
 
   return {
     ok: true,
-    command: 'mcf integrate --action fail',
+    command: 'multi-claude integrate --action fail',
     result: { integration_run_id: run.integration_run_id, status: 'failed', packets_affected: packetIds.length },
     transitions: packetIds.map(id => ({ entity_type: 'packet' as const, entity_id: id, from_state: 'integrating', to_state: 'verified' })),
   };
@@ -366,7 +366,7 @@ export function integrateCommand(): Command {
     .requiredOption('--integrator <name>', 'Integrator identity')
     .requiredOption('--action <action>', 'prepare / execute / complete / fail')
     .option('--session <id>', 'Session identifier')
-    .option('--db-path <path>', 'DB path', '.mcf/execution.db')
+    .option('--db-path <path>', 'DB path', '.multi-claude/execution.db')
     .action((opts) => {
       const result = runIntegrate(opts.dbPath, opts.feature, opts.integrator, opts.action as IntegrateAction, opts.session);
       console.log(JSON.stringify(result, null, 2));

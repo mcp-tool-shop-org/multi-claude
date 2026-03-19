@@ -7,7 +7,7 @@ import { openDb, migrateDb, healthCheck, setSchemaVersion, getSchemaVersion } fr
 import type Database from 'better-sqlite3';
 
 function tempDbPath(): string {
-  const dir = join(tmpdir(), 'mcf-test-' + randomBytes(4).toString('hex'));
+  const dir = join(tmpdir(), 'multi-claude-test-' + randomBytes(4).toString('hex'));
   mkdirSync(dir, { recursive: true });
   return join(dir, 'test.db');
 }
@@ -32,9 +32,9 @@ describe('Database schema', () => {
     }
   });
 
-  it('creates all 15 tables', () => {
+  it('creates all 17 tables', () => {
     const health = healthCheck(db);
-    expect(health.tables).toBe(15);
+    expect(health.tables).toBe(17);
   });
 
   it('enables WAL mode', () => {

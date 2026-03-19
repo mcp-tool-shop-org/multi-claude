@@ -39,7 +39,7 @@ export function runApprove(
     // 1. Validate scope_type and approval_type compatibility
     const validTypes = VALID_SCOPE_TYPE_COMBOS[scopeType];
     if (!validTypes || !validTypes.includes(approvalType)) {
-      return mcfError('mcf approve', ERR.TYPE_MISMATCH,
+      return mcfError('multi-claude approve', ERR.TYPE_MISMATCH,
         `Approval type '${approvalType}' is not valid for scope type '${scopeType}'`,
         { scope_type: scopeType, approval_type: approvalType, valid_types: validTypes ?? [] },
       );
@@ -48,28 +48,28 @@ export function runApprove(
     // 2. Verify the scope entity exists and is not terminal
     if (scopeType === 'feature') {
       const feature = db.prepare('SELECT status FROM features WHERE feature_id = ?').get(scopeId) as { status: string } | undefined;
-      if (!feature) return mcfError('mcf approve', ERR.SCOPE_NOT_FOUND, `Feature '${scopeId}' not found`, { scope_id: scopeId });
+      if (!feature) return mcfError('multi-claude approve', ERR.SCOPE_NOT_FOUND, `Feature '${scopeId}' not found`, { scope_id: scopeId });
       if (isFeatureTerminal(feature.status as any)) {
-        return mcfError('mcf approve', ERR.TERMINAL_STATE, `Feature '${scopeId}' is in terminal state '${feature.status}'`, { scope_id: scopeId, status: feature.status });
+        return mcfError('multi-claude approve', ERR.TERMINAL_STATE, `Feature '${scopeId}' is in terminal state '${feature.status}'`, { scope_id: scopeId, status: feature.status });
       }
     } else if (scopeType === 'packet' || scopeType === 'packet_graph') {
       // For packet_graph, scope_id is the feature_id
       const target = scopeType === 'packet'
         ? db.prepare('SELECT status FROM packets WHERE packet_id = ?').get(scopeId)
         : db.prepare('SELECT status FROM features WHERE feature_id = ?').get(scopeId);
-      if (!target) return mcfError('mcf approve', ERR.SCOPE_NOT_FOUND, `Entity '${scopeId}' not found`, { scope_id: scopeId });
+      if (!target) return mcfError('multi-claude approve', ERR.SCOPE_NOT_FOUND, `Entity '${scopeId}' not found`, { scope_id: scopeId });
     } else if (scopeType === 'contract_delta') {
       const delta = db.prepare('SELECT status FROM contract_deltas WHERE contract_delta_id = ?').get(scopeId) as { status: string } | undefined;
-      if (!delta) return mcfError('mcf approve', ERR.SCOPE_NOT_FOUND, `Contract delta '${scopeId}' not found`, { scope_id: scopeId });
+      if (!delta) return mcfError('multi-claude approve', ERR.SCOPE_NOT_FOUND, `Contract delta '${scopeId}' not found`, { scope_id: scopeId });
     } else if (scopeType === 'amendment') {
       const amendment = db.prepare('SELECT status FROM packet_amendments WHERE amendment_id = ?').get(scopeId) as { status: string } | undefined;
-      if (!amendment) return mcfError('mcf approve', ERR.SCOPE_NOT_FOUND, `Amendment '${scopeId}' not found`, { scope_id: scopeId });
+      if (!amendment) return mcfError('multi-claude approve', ERR.SCOPE_NOT_FOUND, `Amendment '${scopeId}' not found`, { scope_id: scopeId });
     }
     // integration_run, law_amendment, exception: no entity validation needed pre-creation
 
     // 3. Conditions required for approved_with_conditions
     if (decision === 'approved_with_conditions' && !conditions) {
-      return mcfError('mcf approve', ERR.CONDITIONS_REQUIRED, 'Decision "approved_with_conditions" requires conditions', {});
+      return mcfError('multi-claude approve', ERR.CONDITIONS_REQUIRED, 'Decision "approved_with_conditions" requires conditions', {});
     }
 
     const now = nowISO();
@@ -90,7 +90,7 @@ export function runApprove(
           db.prepare(`UPDATE features SET status = 'approved', approved_by = ?, approved_at = ?, updated_at = ? WHERE feature_id = ?`).run(actor, now, now, scopeId);
           db.prepare(`
             INSERT INTO state_transition_log (transition_id, entity_type, entity_id, from_state, to_state, actor_type, actor_id, reason, created_at)
-            VALUES (?, 'feature', ?, 'proposed', 'approved', 'human', ?, 'approved via mcf approve', ?)
+            VALUES (?, 'feature', ?, 'proposed', 'approved', 'human', ?, 'approved via multi-claude approve', ?)
           `).run(generateId('tr'), scopeId, actor, now);
           sideEffects.push(`feature ${scopeId} → approved`);
         }
@@ -114,7 +114,7 @@ export function runApprove(
 
     return {
       ok: true,
-      command: 'mcf approve',
+      command: 'multi-claude approve',
       result: {
         approval_id: approvalId,
         scope_type: scopeType,
@@ -139,7 +139,7 @@ export function approveCommand(): Command {
     .requiredOption('--actor <name>', 'Human identity')
     .option('--rationale <text>', 'Why')
     .option('--conditions <text>', 'Conditions (required for approved_with_conditions)')
-    .option('--db-path <path>', 'DB path', '.mcf/execution.db')
+    .option('--db-path <path>', 'DB path', '.multi-claude/execution.db')
     .action((opts) => {
       const result = runApprove(
         opts.dbPath, opts.scopeType as ApprovalScopeType, opts.scopeId,

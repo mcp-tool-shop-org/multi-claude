@@ -1,4 +1,4 @@
--- MCF Execution DB Schema v0.1.0
+-- Multi-Claude Execution DB Schema v0.1.0
 -- Generated from EXECUTION-DB.md
 
 PRAGMA journal_mode = WAL;
@@ -62,6 +62,8 @@ CREATE TABLE IF NOT EXISTS packets (
     context                 TEXT,
     allowed_files           TEXT NOT NULL,
     forbidden_files         TEXT NOT NULL DEFAULT '[]',
+    forbidden_rationale     TEXT NOT NULL DEFAULT '{}',
+    reference_files         TEXT NOT NULL DEFAULT '[]',
     module_family           TEXT,
     protected_file_access   TEXT NOT NULL DEFAULT 'none'
                             CHECK (protected_file_access IN ('none', 'merge_only', 'author_approved')),
@@ -408,3 +410,43 @@ CREATE INDEX IF NOT EXISTS idx_promotions_status ON knowledge_promotions(status)
 CREATE INDEX IF NOT EXISTS idx_amendments_packet ON packet_amendments(packet_id, status);
 
 CREATE INDEX IF NOT EXISTS idx_deltas_packet ON contract_deltas(packet_id, status);
+
+-- ─── Auto Runs ──────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS auto_runs (
+    run_id TEXT PRIMARY KEY,
+    feature_id TEXT NOT NULL REFERENCES features(feature_id),
+    status TEXT NOT NULL CHECK (status IN ('planned', 'running', 'paused', 'completing', 'complete', 'failed', 'stopped')),
+    started_at TEXT NOT NULL,
+    completed_at TEXT,
+    current_wave INTEGER NOT NULL DEFAULT 0,
+    total_waves INTEGER NOT NULL,
+    pause_reason TEXT,
+    pause_gate_type TEXT,
+    pause_gate_id TEXT,
+    last_error TEXT,
+    config_json TEXT NOT NULL DEFAULT '{}'
+);
+
+-- Run exclusivity: at most one active run per feature
+CREATE UNIQUE INDEX IF NOT EXISTS idx_auto_runs_active_feature
+    ON auto_runs(feature_id) WHERE status IN ('planned', 'running', 'paused', 'completing');
+
+CREATE TABLE IF NOT EXISTS auto_run_workers (
+    worker_id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL REFERENCES auto_runs(run_id),
+    packet_id TEXT NOT NULL REFERENCES packets(packet_id),
+    wave INTEGER NOT NULL,
+    process_pid INTEGER,
+    status TEXT NOT NULL CHECK (status IN ('pending', 'launching', 'running', 'completed', 'failed', 'timed_out', 'retrying')),
+    started_at TEXT,
+    completed_at TEXT,
+    attempt_number INTEGER NOT NULL DEFAULT 1,
+    output_dir TEXT,
+    worktree_path TEXT,
+    branch_name TEXT,
+    error TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_auto_workers_run ON auto_run_workers(run_id, wave, status);
+CREATE INDEX IF NOT EXISTS idx_auto_workers_packet ON auto_run_workers(packet_id);

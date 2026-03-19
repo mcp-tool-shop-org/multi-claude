@@ -132,7 +132,7 @@ function statusPacket(dbPath: string, packetId: string): void {
 function statusWorklist(dbPath: string): void {
   const db = openDb(dbPath);
   try {
-    // Claimable = ready + all hard deps merged + no active claim
+    // Claimable = ready + all hard deps satisfied (verified/integrating/merged) + no active claim
     const readyPackets = db.prepare(`
       SELECT p.packet_id, p.feature_id, p.layer, p.role, p.goal
       FROM packets p
@@ -143,7 +143,7 @@ function statusWorklist(dbPath: string): void {
           JOIN packets dep ON dep.packet_id = pd.depends_on_packet_id
           WHERE pd.packet_id = p.packet_id
             AND pd.dependency_type = 'hard'
-            AND dep.status != 'merged'
+            AND dep.status NOT IN ('verified', 'integrating', 'merged')
         )
     `).all() as WorklistResult['claimable'];
 
@@ -175,28 +175,28 @@ export function statusCommand(): Command {
 
   cmd.command('feature <feature_id>')
     .description('Show feature status')
-    .option('--db-path <path>', 'DB path', '.mcf/execution.db')
+    .option('--db-path <path>', 'DB path', '.multi-claude/execution.db')
     .action((featureId: string, opts: { dbPath: string }) => {
       statusFeature(opts.dbPath, featureId);
     });
 
   cmd.command('packet <packet_id>')
     .description('Show packet status')
-    .option('--db-path <path>', 'DB path', '.mcf/execution.db')
+    .option('--db-path <path>', 'DB path', '.multi-claude/execution.db')
     .action((packetId: string, opts: { dbPath: string }) => {
       statusPacket(opts.dbPath, packetId);
     });
 
   cmd.command('worklist')
     .description('Show claimable packets')
-    .option('--db-path <path>', 'DB path', '.mcf/execution.db')
+    .option('--db-path <path>', 'DB path', '.multi-claude/execution.db')
     .action((opts: { dbPath: string }) => {
       statusWorklist(opts.dbPath);
     });
 
   cmd.command('leases')
     .description('Show active claim leases')
-    .option('--db-path <path>', 'DB path', '.mcf/execution.db')
+    .option('--db-path <path>', 'DB path', '.multi-claude/execution.db')
     .action((opts: { dbPath: string }) => {
       statusLeases(opts.dbPath);
     });

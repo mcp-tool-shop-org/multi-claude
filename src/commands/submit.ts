@@ -5,45 +5,7 @@ import { mcfError, ERR } from '../lib/errors.js';
 import { generateId, nowISO } from '../lib/ids.js';
 import type { McfResult } from '../types/common.js';
 import { minimatch } from '../lib/glob.js';
-
-interface ArtifactManifest {
-  files_created: string[];
-  files_modified: string[];
-  files_deleted: string[];
-  test_files: string[];
-  test_results_ref?: string;
-}
-
-interface WritebackStructured {
-  module: string;
-  change_type: string;
-  summary: string;
-  files_touched: string[];
-  contract_delta: string;
-  risks: string[];
-  dependencies_affected: string[];
-  tests_added: string[];
-  docs_required: boolean;
-  architecture_impact: string | null;
-  relationship_suggestions: unknown[];
-}
-
-interface WritebackProse {
-  what_changed: string;
-  why_changed: string;
-  what_to_watch: string;
-  what_affects_next: string;
-}
-
-interface Writeback {
-  writeback: WritebackStructured & { prose: WritebackProse };
-}
-
-interface SeamChange {
-  file: string;
-  change_description: string;
-  priority: string;
-}
+import { validateArtifactManifest, validateWriteback } from '../schema/submission.js';
 
 export interface SubmitResult {
   submission_id: string;
@@ -53,59 +15,6 @@ export interface SubmitResult {
   contract_delta: string | null;
   artifacts_count: number;
   tests_count: number;
-}
-
-function validateArtifactManifest(raw: string): { manifest: ArtifactManifest } | { error: string } {
-  let parsed: unknown;
-  try { parsed = JSON.parse(raw); } catch { return { error: 'Invalid JSON' }; }
-
-  const m = parsed as Record<string, unknown>;
-  if (!Array.isArray(m.files_created)) return { error: 'Missing files_created array' };
-  if (!Array.isArray(m.files_modified)) return { error: 'Missing files_modified array' };
-  if (!Array.isArray(m.files_deleted)) return { error: 'Missing files_deleted array' };
-  if (!Array.isArray(m.test_files)) return { error: 'Missing test_files array' };
-
-  const totalFiles = m.files_created.length + m.files_modified.length;
-  if (totalFiles === 0) return { error: 'No files created or modified' };
-
-  return { manifest: m as unknown as ArtifactManifest };
-}
-
-function validateWriteback(raw: string, required: boolean): { writeback: Writeback } | { error: string } {
-  if (!required) return { writeback: JSON.parse(raw) as Writeback };
-
-  let parsed: unknown;
-  try { parsed = JSON.parse(raw); } catch { return { error: 'Invalid JSON' }; }
-
-  const w = (parsed as Record<string, unknown>).writeback as Record<string, unknown> | undefined;
-  if (!w) return { error: 'Missing writeback object' };
-
-  for (const field of ['module', 'change_type', 'summary']) {
-    if (!w[field] || typeof w[field] !== 'string' || (w[field] as string).trim() === '') {
-      return { error: `Writeback field '${field}' is empty or missing` };
-    }
-  }
-
-  if (!Array.isArray(w.files_touched) || w.files_touched.length === 0) {
-    return { error: 'Writeback files_touched is empty or missing' };
-  }
-
-  const prose = w.prose as Record<string, unknown> | undefined;
-  if (!prose) return { error: 'Missing writeback.prose object' };
-
-  for (const field of ['what_changed', 'why_changed', 'what_to_watch', 'what_affects_next']) {
-    if (!prose[field] || typeof prose[field] !== 'string' || (prose[field] as string).trim() === '') {
-      return { error: `Writeback prose field '${field}' is empty or missing` };
-    }
-  }
-
-  // Reject generic writeback
-  const summary = (w.summary as string).toLowerCase();
-  if (summary === 'implemented the feature' || summary === 'done' || summary.length < 10) {
-    return { error: 'Writeback summary is too generic — describe what actually changed' };
-  }
-
-  return { writeback: parsed as Writeback };
 }
 
 function checkFileAgainstGlobs(file: string, globs: string[]): boolean {
@@ -140,8 +49,8 @@ export function runSubmit(
       protected_file_access: string; seam_file_access: string;
     } | undefined;
 
-    if (!packet) return mcfError('mcf submit', ERR.PACKET_NOT_FOUND, `Packet '${packetId}' not found`, { packet_id: packetId });
-    if (packet.status !== 'in_progress') return mcfError('mcf submit', ERR.PACKET_NOT_IN_PROGRESS, `Packet is '${packet.status}', expected 'in_progress'`, { current_status: packet.status });
+    if (!packet) return mcfError('multi-claude submit', ERR.PACKET_NOT_FOUND, `Packet '${packetId}' not found`, { packet_id: packetId });
+    if (packet.status !== 'in_progress') return mcfError('multi-claude submit', ERR.PACKET_NOT_IN_PROGRESS, `Packet is '${packet.status}', expected 'in_progress'`, { current_status: packet.status });
 
     // 2. Verify active claim owned by worker
     const claim = db.prepare(`
@@ -149,25 +58,25 @@ export function runSubmit(
     `).get(packetId) as { claim_id: string; attempt_id: string; claimed_by: string } | undefined;
 
     if (!claim || claim.claimed_by !== worker) {
-      return mcfError('mcf submit', ERR.NOT_OWNER, `Worker '${worker}' does not own the active claim`, { packet_id: packetId });
+      return mcfError('multi-claude submit', ERR.NOT_OWNER, `Worker '${worker}' does not own the active claim`, { packet_id: packetId });
     }
 
     // 3. Validate artifact manifest
     const artifactResult = validateArtifactManifest(artifactsJson);
     if ('error' in artifactResult) {
-      return mcfError('mcf submit', ERR.INVALID_ARTIFACTS, artifactResult.error, { validation_errors: [artifactResult.error] });
+      return mcfError('multi-claude submit', ERR.INVALID_ARTIFACTS, artifactResult.error, { validation_errors: [artifactResult.error] });
     }
     const manifest = artifactResult.manifest;
 
     // 4. Check test requirement
     if (manifest.test_files.length === 0 && packet.knowledge_writeback_required) {
-      return mcfError('mcf submit', ERR.NO_TESTS, 'No test files in submission — tests are required', {});
+      return mcfError('multi-claude submit', ERR.NO_TESTS, 'No test files in submission — tests are required', {});
     }
 
     // 5. Validate writeback
     const writebackResult = validateWriteback(writebackJson, packet.knowledge_writeback_required === 1);
     if ('error' in writebackResult) {
-      return mcfError('mcf submit', ERR.INVALID_WRITEBACK, writebackResult.error, { missing_fields: [writebackResult.error] });
+      return mcfError('multi-claude submit', ERR.INVALID_WRITEBACK, writebackResult.error, { missing_fields: [writebackResult.error] });
     }
 
     // 6. Check file scope — all artifact files must be within allowed_files
@@ -179,7 +88,7 @@ export function runSubmit(
     if (allowedGlobs.length > 0) {
       for (const file of allFiles) {
         if (!checkFileAgainstGlobs(file, allowedGlobs)) {
-          return mcfError('mcf submit', ERR.SCOPE_VIOLATION, `File '${file}' is outside allowed scope`, { file, allowed_globs: allowedGlobs });
+          return mcfError('multi-claude submit', ERR.SCOPE_VIOLATION, `File '${file}' is outside allowed scope`, { file, allowed_globs: allowedGlobs });
         }
       }
     }
@@ -187,13 +96,13 @@ export function runSubmit(
     // 7. Check forbidden files
     for (const file of allFiles) {
       if (checkFileAgainstGlobs(file, forbiddenGlobs)) {
-        return mcfError('mcf submit', ERR.FORBIDDEN_FILE_TOUCHED, `File '${file}' matches forbidden pattern`, { file });
+        return mcfError('multi-claude submit', ERR.FORBIDDEN_FILE_TOUCHED, `File '${file}' matches forbidden pattern`, { file });
       }
     }
 
     // 8. Contract delta check
     if (packet.contract_delta_policy === 'none' && deltaRef) {
-      return mcfError('mcf submit', ERR.SCOPE_VIOLATION, 'Packet policy is "none" but a contract delta was declared', { policy: 'none', delta_ref: deltaRef });
+      return mcfError('multi-claude submit', ERR.SCOPE_VIOLATION, 'Packet policy is "none" but a contract delta was declared', { policy: 'none', delta_ref: deltaRef });
     }
 
     // 9. Get attempt number for submission ID
@@ -241,7 +150,7 @@ export function runSubmit(
 
     return {
       ok: true,
-      command: 'mcf submit',
+      command: 'multi-claude submit',
       result: {
         submission_id: submissionId,
         packet_id: packetId,
@@ -273,7 +182,7 @@ export function submitCommand(): Command {
     .option('--merge-ready', 'Declare merge ready', false)
     .option('--no-merge-ready', 'Declare NOT merge ready')
     .option('--blockers <reasons...>', 'Merge blockers')
-    .option('--db-path <path>', 'DB path', '.mcf/execution.db')
+    .option('--db-path <path>', 'DB path', '.multi-claude/execution.db')
     .action((opts) => {
       const artifactsJson = readFileSync(opts.artifacts, 'utf-8');
       const writebackJson = readFileSync(opts.writeback, 'utf-8');

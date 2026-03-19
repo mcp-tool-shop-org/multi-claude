@@ -28,17 +28,17 @@ export function runFeatureCreate(
   constitutionRefs: string[] = [],
 ): McfResult<FeatureCreateResult> {
   if (!isKebabCase(featureId)) {
-    return mcfError('mcf feature create', ERR.INVALID_ID, `Feature ID must be kebab-case: ${featureId}`, { feature_id: featureId });
+    return mcfError('multi-claude feature create', ERR.INVALID_ID, `Feature ID must be kebab-case: ${featureId}`, { feature_id: featureId });
   }
   if (criteria.length === 0) {
-    return mcfError('mcf feature create', ERR.NO_CRITERIA, 'At least one acceptance criterion required', {});
+    return mcfError('multi-claude feature create', ERR.NO_CRITERIA, 'At least one acceptance criterion required', {});
   }
 
   const db = openDb(dbPath);
   try {
     const existing = db.prepare('SELECT feature_id FROM features WHERE feature_id = ?').get(featureId);
     if (existing) {
-      return mcfError('mcf feature create', ERR.DUPLICATE_FEATURE, `Feature '${featureId}' already exists`, { feature_id: featureId });
+      return mcfError('multi-claude feature create', ERR.DUPLICATE_FEATURE, `Feature '${featureId}' already exists`, { feature_id: featureId });
     }
 
     const now = nowISO();
@@ -58,7 +58,7 @@ export function runFeatureCreate(
 
     return {
       ok: true,
-      command: 'mcf feature create',
+      command: 'multi-claude feature create',
       result: { feature_id: featureId, status: 'proposed' },
       transitions: [{ entity_type: 'feature', entity_id: featureId, from_state: null, to_state: 'proposed' }],
     };
@@ -78,13 +78,13 @@ export function runFeatureApprove(
     const feature = db.prepare('SELECT feature_id, status FROM features WHERE feature_id = ?').get(featureId) as { feature_id: string; status: FeatureStatus } | undefined;
 
     if (!feature) {
-      return mcfError('mcf feature approve', ERR.FEATURE_NOT_FOUND, `Feature '${featureId}' not found`, { feature_id: featureId });
+      return mcfError('multi-claude feature approve', ERR.FEATURE_NOT_FOUND, `Feature '${featureId}' not found`, { feature_id: featureId });
     }
     if (isFeatureTerminal(feature.status)) {
-      return mcfError('mcf feature approve', ERR.TERMINAL_STATE, `Feature '${featureId}' is in terminal state '${feature.status}'`, { feature_id: featureId, current_status: feature.status });
+      return mcfError('multi-claude feature approve', ERR.TERMINAL_STATE, `Feature '${featureId}' is in terminal state '${feature.status}'`, { feature_id: featureId, current_status: feature.status });
     }
     if (feature.status !== 'proposed') {
-      return mcfError('mcf feature approve', ERR.INVALID_STATE, `Feature '${featureId}' is '${feature.status}', expected 'proposed'`, { feature_id: featureId, current_status: feature.status });
+      return mcfError('multi-claude feature approve', ERR.INVALID_STATE, `Feature '${featureId}' is '${feature.status}', expected 'proposed'`, { feature_id: featureId, current_status: feature.status });
     }
 
     const now = nowISO();
@@ -110,7 +110,7 @@ export function runFeatureApprove(
 
     return {
       ok: true,
-      command: 'mcf feature approve',
+      command: 'multi-claude feature approve',
       result: { feature_id: featureId, approval_id: approvalId, status: 'approved' },
       transitions: [{ entity_type: 'feature', entity_id: featureId, from_state: 'proposed', to_state: 'approved' }],
     };
@@ -132,7 +132,7 @@ export function featureCommand(): Command {
     .option('--priority <priority>', 'Priority level', 'normal')
     .option('--merge-target <branch>', 'Merge target branch', 'main')
     .option('--constitution-refs <refs...>', 'Constitution references', [])
-    .option('--db-path <path>', 'DB path', '.mcf/execution.db')
+    .option('--db-path <path>', 'DB path', '.multi-claude/execution.db')
     .action((opts) => {
       const result = runFeatureCreate(
         opts.dbPath, opts.id, opts.title, opts.objective,
@@ -147,7 +147,7 @@ export function featureCommand(): Command {
     .requiredOption('--feature <id>', 'Feature ID')
     .requiredOption('--actor <name>', 'Human identity')
     .option('--rationale <text>', 'Why approved')
-    .option('--db-path <path>', 'DB path', '.mcf/execution.db')
+    .option('--db-path <path>', 'DB path', '.multi-claude/execution.db')
     .action((opts) => {
       const result = runFeatureApprove(opts.dbPath, opts.feature, opts.actor, opts.rationale);
       console.log(JSON.stringify(result, null, 2));

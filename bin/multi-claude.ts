@@ -12,12 +12,15 @@ import { approveCommand } from '../src/commands/approve.js';
 import { promoteCommand } from '../src/commands/promote.js';
 import { integrateCommand } from '../src/commands/integrate.js';
 import { expireCommand } from '../src/commands/expire.js';
+import { autoCommand } from '../src/commands/auto.js';
+import { validateOutputCommand } from '../src/commands/validate-output.js';
+import { hooksCommand } from '../src/commands/hooks.js';
 
 const program = new Command();
 
 program
-  .name('mcf')
-  .description('Multi-Claude Factory — lane-based parallel build system')
+  .name('multi-claude')
+  .description('Multi-Claude — lane-based parallel build system')
   .version('0.1.0');
 
 program.addCommand(initCommand());
@@ -33,5 +36,8 @@ program.addCommand(approveCommand());
 program.addCommand(promoteCommand());
 program.addCommand(integrateCommand());
 program.addCommand(expireCommand());
+program.addCommand(autoCommand());
+program.addCommand(validateOutputCommand());
+program.addCommand(hooksCommand());
 
 program.parse();

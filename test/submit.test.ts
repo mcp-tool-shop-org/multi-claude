@@ -12,7 +12,7 @@ import { runRender } from '../src/commands/render.js';
 import { openDb } from '../src/db/connection.js';
 
 function tempDir(): string {
-  const dir = join(tmpdir(), 'mcf-test-' + randomBytes(4).toString('hex'));
+  const dir = join(tmpdir(), 'multi-claude-test-' + randomBytes(4).toString('hex'));
   mkdirSync(dir, { recursive: true });
   return dir;
 }
@@ -58,13 +58,13 @@ const VALID_WRITEBACK = JSON.stringify({
   },
 });
 
-describe('mcf submit', () => {
+describe('multi-claude submit', () => {
   let dir: string;
   let dbPath: string;
 
   beforeEach(() => {
     dir = tempDir();
-    dbPath = join(dir, '.mcf', 'execution.db');
+    dbPath = join(dir, '.multi-claude', 'execution.db');
     runInit('mcp-tool-shop-org/GlyphStudio', dbPath);
   });
 
@@ -242,13 +242,13 @@ describe('mcf submit', () => {
   });
 });
 
-describe('mcf render', () => {
+describe('multi-claude render', () => {
   let dir: string;
   let dbPath: string;
 
   beforeEach(() => {
     dir = tempDir();
-    dbPath = join(dir, '.mcf', 'execution.db');
+    dbPath = join(dir, '.multi-claude', 'execution.db');
     runInit('mcp-tool-shop-org/GlyphStudio', dbPath);
     runFeatureCreate(dbPath, 'anchor-propagation', 'Anchor Propagation', 'Propagate anchor updates', ['Backend works'], 'mcp-tool-shop-org/GlyphStudio');
     runFeatureApprove(dbPath, 'anchor-propagation', 'mike');

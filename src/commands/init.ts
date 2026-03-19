@@ -19,7 +19,7 @@ export function runInit(repoSlug: string, dbPath: string, force = false): McfRes
   const fullDbPath = resolve(dbPath);
 
   if (existsSync(fullDbPath) && !force) {
-    return mcfError('mcf init', ERR.DB_EXISTS, `Execution DB already exists at ${fullDbPath}. Use --force to reinitialize.`, { db_path: fullDbPath });
+    return mcfError('multi-claude init', ERR.DB_EXISTS, `Execution DB already exists at ${fullDbPath}. Use --force to reinitialize.`, { db_path: fullDbPath });
   }
 
   if (!existsSync(mcfDir)) {
@@ -35,7 +35,7 @@ export function runInit(repoSlug: string, dbPath: string, force = false): McfRes
 
     return {
       ok: true,
-      command: 'mcf init',
+      command: 'multi-claude init',
       result: {
         db_path: fullDbPath,
         repo_slug: repoSlug,
@@ -51,9 +51,9 @@ export function runInit(repoSlug: string, dbPath: string, force = false): McfRes
 
 export function initCommand(): Command {
   const cmd = new Command('init')
-    .description('Initialize MCF execution DB for a repo workspace')
+    .description('Initialize multi-claude execution DB for a repo workspace')
     .requiredOption('--repo <slug>', 'Repo slug (e.g. mcp-tool-shop-org/GlyphStudio)')
-    .option('--db-path <path>', 'Path to execution DB', '.mcf/execution.db')
+    .option('--db-path <path>', 'Path to execution DB', '.multi-claude/execution.db')
     .option('--force', 'Reinitialize existing DB', false)
     .action((opts: { repo: string; dbPath: string; force: boolean }) => {
       const result = runInit(opts.repo, opts.dbPath, opts.force);

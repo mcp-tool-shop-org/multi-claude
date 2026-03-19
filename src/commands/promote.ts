@@ -28,11 +28,11 @@ export function runPromote(
     // 1. Verify packet exists and is in verified or later state
     const packet = db.prepare('SELECT packet_id, status FROM packets WHERE packet_id = ?').get(packetId) as { packet_id: string; status: string } | undefined;
     if (!packet) {
-      return mcfError('mcf promote', ERR.PACKET_NOT_FOUND, `Packet '${packetId}' not found`, { packet_id: packetId });
+      return mcfError('multi-claude promote', ERR.PACKET_NOT_FOUND, `Packet '${packetId}' not found`, { packet_id: packetId });
     }
     const validStates = ['verified', 'integrating', 'merged'];
     if (!validStates.includes(packet.status)) {
-      return mcfError('mcf promote', ERR.INVALID_STATE, `Packet is '${packet.status}', expected verified or later`, { packet_id: packetId, current_status: packet.status });
+      return mcfError('multi-claude promote', ERR.INVALID_STATE, `Packet is '${packet.status}', expected verified or later`, { packet_id: packetId, current_status: packet.status });
     }
 
     // 2. Verify submission exists and belongs to this packet
@@ -40,18 +40,18 @@ export function runPromote(
       SELECT submission_id, submitted_by FROM packet_submissions WHERE submission_id = ? AND packet_id = ?
     `).get(submissionId, packetId) as { submission_id: string; submitted_by: string } | undefined;
     if (!submission) {
-      return mcfError('mcf promote', ERR.SUBMISSION_NOT_FOUND, `Submission '${submissionId}' not found for packet '${packetId}'`, { submission_id: submissionId, packet_id: packetId });
+      return mcfError('multi-claude promote', ERR.SUBMISSION_NOT_FOUND, `Submission '${submissionId}' not found for packet '${packetId}'`, { submission_id: submissionId, packet_id: packetId });
     }
 
     // 3. Check 1:1 — no existing promotion for this submission
     const existing = db.prepare('SELECT knowledge_promotion_id FROM knowledge_promotions WHERE submission_id = ?').get(submissionId) as { knowledge_promotion_id: string } | undefined;
     if (existing) {
-      return mcfError('mcf promote', ERR.ALREADY_PROMOTED, `Submission '${submissionId}' already has a promotion`, { existing_promotion_id: existing.knowledge_promotion_id });
+      return mcfError('multi-claude promote', ERR.ALREADY_PROMOTED, `Submission '${submissionId}' already has a promotion`, { existing_promotion_id: existing.knowledge_promotion_id });
     }
 
     // 4. Independence: promoter != builder
     if (promoter === submission.submitted_by) {
-      return mcfError('mcf promote', ERR.INDEPENDENCE_VIOLATION, `Promoter '${promoter}' is the same as builder '${submission.submitted_by}'`, { promoter, builder: submission.submitted_by });
+      return mcfError('multi-claude promote', ERR.INDEPENDENCE_VIOLATION, `Promoter '${promoter}' is the same as builder '${submission.submitted_by}'`, { promoter, builder: submission.submitted_by });
     }
 
     const now = nowISO();
@@ -80,7 +80,7 @@ export function runPromote(
 
     return {
       ok: true,
-      command: 'mcf promote',
+      command: 'multi-claude promote',
       result: {
         knowledge_promotion_id: promotionId,
         packet_id: packetId,
@@ -106,7 +106,7 @@ export function promoteCommand(): Command {
     .option('--relationships <ids...>', 'Relationship IDs', [])
     .option('--architecture-updated', 'Architecture note was updated', false)
     .option('--docs-updated <files...>', 'Doc files updated', [])
-    .option('--db-path <path>', 'DB path', '.mcf/execution.db')
+    .option('--db-path <path>', 'DB path', '.multi-claude/execution.db')
     .action((opts) => {
       const result = runPromote(
         opts.dbPath, opts.packet, opts.submission, opts.promoter, opts.summary,

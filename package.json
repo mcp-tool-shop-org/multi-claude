@@ -1,10 +1,10 @@
 {
-  "name": "@mcf/cli",
+  "name": "@multi-claude/cli",
   "version": "0.1.0",
-  "description": "Multi-Claude Factory — lane-based parallel build system",
+  "description": "Multi-Claude — lane-based parallel build system",
   "type": "module",
   "bin": {
-    "mcf": "./dist/bin/mcf.js"
+    "multi-claude": "./dist/bin/multi-claude.js"
   },
   "scripts": {
     "build": "tsc",
@@ -13,9 +13,13 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/ test/",
-    "mcf": "tsx bin/mcf.ts"
+    "multi-claude": "tsx bin/multi-claude.ts"
   },
-  "keywords": ["multi-claude", "build-system", "parallel", "mcf"],
+  "keywords": [
+    "multi-claude",
+    "build-system",
+    "parallel"
+  ],
   "author": "mcp-tool-shop",
   "license": "MIT",
   "devDependencies": {
@@ -27,6 +31,7 @@
     "vitest": "^3.0.0"
   },
   "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.79",
     "better-sqlite3": "^11.7.0",
     "commander": "^13.0.0"
   },

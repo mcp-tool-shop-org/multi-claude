@@ -9,7 +9,7 @@ import { runPacketCreate, runPacketReady, type PacketDef } from '../src/commands
 import { openDb } from '../src/db/connection.js';
 
 function tempDir(): string {
-  const dir = join(tmpdir(), 'mcf-test-' + randomBytes(4).toString('hex'));
+  const dir = join(tmpdir(), 'multi-claude-test-' + randomBytes(4).toString('hex'));
   mkdirSync(dir, { recursive: true });
   return dir;
 }
@@ -20,7 +20,7 @@ describe('Feature + Packet lifecycle', () => {
 
   beforeEach(() => {
     dir = tempDir();
-    dbPath = join(dir, '.mcf', 'execution.db');
+    dbPath = join(dir, '.multi-claude', 'execution.db');
     const initResult = runInit('mcp-tool-shop-org/GlyphStudio', dbPath);
     expect(initResult.ok).toBe(true);
   });

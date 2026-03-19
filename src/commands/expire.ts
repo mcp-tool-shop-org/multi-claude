@@ -37,7 +37,7 @@ export function runExpire(dbPath: string, dryRun = false): McfResult<ExpireResul
     if (dryRun || expired.length === 0) {
       return {
         ok: true,
-        command: 'mcf expire',
+        command: 'multi-claude expire',
         result: {
           expired_count: expired.length,
           expired_claims: expired.map(e => ({
@@ -90,7 +90,7 @@ export function runExpire(dbPath: string, dryRun = false): McfResult<ExpireResul
 
     return {
       ok: true,
-      command: 'mcf expire',
+      command: 'multi-claude expire',
       result: {
         expired_count: results.length,
         expired_claims: results,
@@ -111,7 +111,7 @@ export function expireCommand(): Command {
   const cmd = new Command('expire')
     .description('Expire stale claim leases')
     .option('--dry-run', 'Report without acting', false)
-    .option('--db-path <path>', 'DB path', '.mcf/execution.db')
+    .option('--db-path <path>', 'DB path', '.multi-claude/execution.db')
     .action((opts) => {
       const result = runExpire(opts.dbPath, opts.dryRun);
       console.log(JSON.stringify(result, null, 2));

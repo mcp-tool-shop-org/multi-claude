@@ -31,6 +31,8 @@ export interface PacketDef {
   merge_target?: string;
   depends_on?: string[];
   soft_depends_on?: string[];
+  forbidden_rationale?: Record<string, string>;
+  reference_files?: string[];
 }
 
 export interface PacketCreateResult {
@@ -61,20 +63,20 @@ export function runPacketCreate(
     const feature = db.prepare('SELECT feature_id, status, repo_slug FROM features WHERE feature_id = ?').get(featureId) as { feature_id: string; status: FeatureStatus; repo_slug: string } | undefined;
 
     if (!feature) {
-      return mcfError('mcf packet create', ERR.FEATURE_NOT_FOUND, `Feature '${featureId}' not found`, { feature_id: featureId });
+      return mcfError('multi-claude packet create', ERR.FEATURE_NOT_FOUND, `Feature '${featureId}' not found`, { feature_id: featureId });
     }
     if (feature.status !== 'approved' && feature.status !== 'in_progress') {
-      return mcfError('mcf packet create', ERR.FEATURE_NOT_APPROVED, `Feature '${featureId}' status is '${feature.status}', expected 'approved' or 'in_progress'`, { feature_id: featureId, current_status: feature.status });
+      return mcfError('multi-claude packet create', ERR.FEATURE_NOT_APPROVED, `Feature '${featureId}' status is '${feature.status}', expected 'approved' or 'in_progress'`, { feature_id: featureId, current_status: feature.status });
     }
 
     // Validate packet IDs
     for (const p of packets) {
       if (!isValidPacketId(p.packet_id)) {
-        return mcfError('mcf packet create', ERR.INVALID_PACKET_ID, `Packet ID '${p.packet_id}' does not follow convention`, { packet_id: p.packet_id });
+        return mcfError('multi-claude packet create', ERR.INVALID_PACKET_ID, `Packet ID '${p.packet_id}' does not follow convention`, { packet_id: p.packet_id });
       }
       const existing = db.prepare('SELECT packet_id FROM packets WHERE packet_id = ?').get(p.packet_id);
       if (existing) {
-        return mcfError('mcf packet create', ERR.DUPLICATE_PACKET, `Packet '${p.packet_id}' already exists`, { packet_id: p.packet_id });
+        return mcfError('multi-claude packet create', ERR.DUPLICATE_PACKET, `Packet '${p.packet_id}' already exists`, { packet_id: p.packet_id });
       }
     }
 
@@ -85,11 +87,11 @@ export function runPacketCreate(
         if (!batchIds.has(dep)) {
           const existing = db.prepare('SELECT packet_id FROM packets WHERE packet_id = ?').get(dep);
           if (!existing) {
-            return mcfError('mcf packet create', ERR.DEPENDENCY_NOT_FOUND, `Dependency '${dep}' not found`, { packet_id: p.packet_id, dependency: dep });
+            return mcfError('multi-claude packet create', ERR.DEPENDENCY_NOT_FOUND, `Dependency '${dep}' not found`, { packet_id: p.packet_id, dependency: dep });
           }
         }
         if (dep === p.packet_id) {
-          return mcfError('mcf packet create', ERR.CIRCULAR_DEPENDENCY, `Packet '${p.packet_id}' depends on itself`, { packet_id: p.packet_id });
+          return mcfError('multi-claude packet create', ERR.CIRCULAR_DEPENDENCY, `Packet '${p.packet_id}' depends on itself`, { packet_id: p.packet_id });
         }
       }
     }
@@ -97,7 +99,7 @@ export function runPacketCreate(
     // Validate test packets have merge_with_layer
     for (const p of packets) {
       if (p.layer === 'test' && !p.merge_with_layer) {
-        return mcfError('mcf packet create', ERR.MISSING_MERGE_LAYER, `Test packet '${p.packet_id}' requires merge_with_layer`, { packet_id: p.packet_id });
+        return mcfError('multi-claude packet create', ERR.MISSING_MERGE_LAYER, `Test packet '${p.packet_id}' requires merge_with_layer`, { packet_id: p.packet_id });
       }
     }
 
@@ -105,17 +107,18 @@ export function runPacketCreate(
     const created: PacketCreateResult['packets_created'] = [];
 
     db.transaction(() => {
+      // Pass 1: Insert all packets
       for (const p of packets) {
         db.prepare(`
           INSERT INTO packets (
             packet_id, feature_id, title, layer, descriptor, role, playbook_id,
             status, goal, acceptance_criteria, context,
-            allowed_files, forbidden_files, module_family,
+            allowed_files, forbidden_files, forbidden_rationale, reference_files, module_family,
             protected_file_access, seam_file_access, merge_with_layer,
             sequence_display, verification_profile_id, verification_overrides,
             rule_profile, contract_delta_policy, knowledge_writeback_required,
             merge_target, created_by, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'coordinator', ?, ?)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'coordinator', ?, ?)
         `).run(
           p.packet_id, featureId, p.title, p.layer, p.descriptor, p.role, p.playbook_id,
           p.goal,
@@ -123,6 +126,8 @@ export function runPacketCreate(
           p.context ?? null,
           JSON.stringify(p.allowed_files),
           JSON.stringify(p.forbidden_files ?? []),
+          JSON.stringify(p.forbidden_rationale ?? {}),
+          JSON.stringify(p.reference_files ?? []),
           p.module_family ?? null,
           p.protected_file_access ?? 'none',
           p.seam_file_access ?? 'none',
@@ -136,20 +141,6 @@ export function runPacketCreate(
           p.merge_target ?? null,
           now, now,
         );
-
-        // Insert dependencies
-        for (const dep of p.depends_on ?? []) {
-          db.prepare(`
-            INSERT INTO packet_dependencies (packet_id, depends_on_packet_id, dependency_type, created_at)
-            VALUES (?, ?, 'hard', ?)
-          `).run(p.packet_id, dep, now);
-        }
-        for (const dep of p.soft_depends_on ?? []) {
-          db.prepare(`
-            INSERT INTO packet_dependencies (packet_id, depends_on_packet_id, dependency_type, created_at)
-            VALUES (?, ?, 'soft', ?)
-          `).run(p.packet_id, dep, now);
-        }
 
         // Log transition
         db.prepare(`
@@ -166,11 +157,27 @@ export function runPacketCreate(
           soft_depends_on: p.soft_depends_on ?? [],
         });
       }
+
+      // Pass 2: Insert all dependencies (after all packets exist)
+      for (const p of packets) {
+        for (const dep of p.depends_on ?? []) {
+          db.prepare(`
+            INSERT INTO packet_dependencies (packet_id, depends_on_packet_id, dependency_type, created_at)
+            VALUES (?, ?, 'hard', ?)
+          `).run(p.packet_id, dep, now);
+        }
+        for (const dep of p.soft_depends_on ?? []) {
+          db.prepare(`
+            INSERT INTO packet_dependencies (packet_id, depends_on_packet_id, dependency_type, created_at)
+            VALUES (?, ?, 'soft', ?)
+          `).run(p.packet_id, dep, now);
+        }
+      }
     })();
 
     return {
       ok: true,
-      command: 'mcf packet create',
+      command: 'multi-claude packet create',
       result: { packets_created: created, dependency_graph_valid: true },
       transitions: created.map(p => ({
         entity_type: 'packet' as const,
@@ -236,7 +243,7 @@ export function runPacketReady(
 
     return {
       ok: true,
-      command: 'mcf packet ready',
+      command: 'multi-claude packet ready',
       result: { packets_readied: readied, feature_status: featureStatus, approval_id: approvalId },
       transitions: readied.map(id => ({
         entity_type: 'packet' as const,
@@ -248,11 +255,11 @@ export function runPacketReady(
   } catch (e) {
     const msg = (e as Error).message;
     if (msg.startsWith('PACKET_NOT_FOUND:')) {
-      return mcfError('mcf packet ready', ERR.PACKET_NOT_FOUND, msg, {});
+      return mcfError('multi-claude packet ready', ERR.PACKET_NOT_FOUND, msg, {});
     }
     if (msg.startsWith('INVALID_STATE:')) {
       const parts = msg.split(':');
-      return mcfError('mcf packet ready', ERR.INVALID_STATE, `Packet '${parts[1]}' is '${parts[2]}', expected 'draft'`, { packet_id: parts[1], current_status: parts[2] });
+      return mcfError('multi-claude packet ready', ERR.INVALID_STATE, `Packet '${parts[1]}' is '${parts[2]}', expected 'draft'`, { packet_id: parts[1], current_status: parts[2] });
     }
     throw e;
   } finally {
@@ -267,7 +274,7 @@ export function packetCommand(): Command {
     .description('Create packets for a feature')
     .requiredOption('--feature <id>', 'Parent feature ID')
     .requiredOption('--from-file <path>', 'JSON file with packet definitions')
-    .option('--db-path <path>', 'DB path', '.mcf/execution.db')
+    .option('--db-path <path>', 'DB path', '.multi-claude/execution.db')
     .action((opts) => {
       const raw = readFileSync(opts.fromFile, 'utf-8');
       const packets: PacketDef[] = JSON.parse(raw);
@@ -281,7 +288,7 @@ export function packetCommand(): Command {
     .requiredOption('--packet <ids...>', 'Packet IDs')
     .requiredOption('--actor <name>', 'Human identity')
     .option('--approve-graph', 'Create packet graph approval', false)
-    .option('--db-path <path>', 'DB path', '.mcf/execution.db')
+    .option('--db-path <path>', 'DB path', '.multi-claude/execution.db')
     .action((opts) => {
       const result = runPacketReady(opts.dbPath, opts.packet, opts.actor, opts.approveGraph);
       console.log(JSON.stringify(result, null, 2));

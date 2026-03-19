@@ -10,7 +10,7 @@ import { runClaim, runProgress } from '../src/commands/claim.js';
 import { openDb } from '../src/db/connection.js';
 
 function tempDir(): string {
-  const dir = join(tmpdir(), 'mcf-test-' + randomBytes(4).toString('hex'));
+  const dir = join(tmpdir(), 'multi-claude-test-' + randomBytes(4).toString('hex'));
   mkdirSync(dir, { recursive: true });
   return dir;
 }
@@ -23,13 +23,13 @@ function seedProofFeature(dbPath: string) {
   runPacketCreate(dbPath, 'anchor-propagation', packets);
 }
 
-describe('mcf claim', () => {
+describe('multi-claude claim', () => {
   let dir: string;
   let dbPath: string;
 
   beforeEach(() => {
     dir = tempDir();
-    dbPath = join(dir, '.mcf', 'execution.db');
+    dbPath = join(dir, '.multi-claude', 'execution.db');
     runInit('mcp-tool-shop-org/GlyphStudio', dbPath);
     seedProofFeature(dbPath);
   });
@@ -183,13 +183,13 @@ describe('mcf claim', () => {
   });
 });
 
-describe('mcf progress', () => {
+describe('multi-claude progress', () => {
   let dir: string;
   let dbPath: string;
 
   beforeEach(() => {
     dir = tempDir();
-    dbPath = join(dir, '.mcf', 'execution.db');
+    dbPath = join(dir, '.multi-claude', 'execution.db');
     runInit('mcp-tool-shop-org/GlyphStudio', dbPath);
     seedProofFeature(dbPath);
     runPacketReady(dbPath, ['anchor-propagation--contract-types'], 'mike');
