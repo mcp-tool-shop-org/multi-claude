@@ -11,8 +11,11 @@ import { runSubmit } from './submit.js';
 import { runVerify } from './verify.js';
 import { runPromote } from './promote.js';
 import type { McfResult } from '../types/common.js';
-import { WORKER_OUTPUT_INSTRUCTIONS, validateArtifactManifest, validateWriteback } from '../schema/submission.js';
 import { runIntegrate } from './integrate.js';
+import { launchWorkerSession } from '../runtime/sdk-runtime.js';
+import { registerSession, unregisterSession, stopAllSessions, stopSession } from '../runtime/session-registry.js';
+import { emitHookEvent } from '../hooks/engine.js';
+import type { WorkerSessionResult } from '../runtime/types.js';
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -190,126 +193,15 @@ function cleanupWorktree(repoRoot: string, packetId: string): void {
   try { execSync(`git branch -D "${branchName}"`, { cwd: repoRoot, stdio: 'pipe' }); } catch { /* ignore */ }
 }
 
-// ─── SDK Worker Session ─────────────────────────────────────────
+// ─── SDK Worker Session (via runtime adapter) ──────────────────
 
-function buildWorkerSystemPrompt(packetMarkdown: string, outputDir: string): string {
-  const outPath = outputDir.replace(/\\/g, '/');
-  return `You are a multi-claude worker executing a build packet. Follow the packet instructions exactly.
-
-RULES:
-- Make ALL code changes inside your working directory
-- Do NOT run any multi-claude commands
-- Do NOT access files outside your working directory
-- Stay within the allowed files listed in the packet
-- Do NOT modify forbidden files listed in the packet
-
-YOUR PACKET:
-${packetMarkdown}
-
-OUTPUT DIRECTORY: ${outPath}
-Write all output files to this exact directory.
-
-${WORKER_OUTPUT_INSTRUCTIONS.replace(/artifacts\.json/g, `${outPath}/artifacts.json`).replace(/writeback\.json/g, `${outPath}/writeback.json`).replace(/COMPLETE/g, `${outPath}/COMPLETE`).replace(/ERROR/g, `${outPath}/ERROR`)}`;
-}
-
-interface WorkerResult {
-  packetId: string;
-  outputDir: string;
-  worktreePath: string;
-  branchName: string;
-  outcome: 'complete' | 'error' | 'amendment' | 'timeout';
-  error?: string;
-}
-
-async function runWorkerSession(
-  packetId: string,
-  packetMarkdown: string,
-  worktreePath: string,
-  branchName: string,
-  outputDir: string,
-  role: string,
-): Promise<WorkerResult> {
-  const model = getModelForRole(role);
-  const systemPrompt = buildWorkerSystemPrompt(packetMarkdown, outputDir);
-
-  // Determine allowed tools based on role
-  const allowedTools = role === 'integrator'
-    ? ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep']
-    : ['Read', 'Write', 'Edit', 'Bash', 'Glob', 'Grep'];
-
-  console.error(`[multi-claude auto] Starting SDK session for ${packetId} (model: ${model})`);
-
-  try {
-    // Dynamic import to avoid issues if SDK not installed
-    const { query } = await import('@anthropic-ai/claude-agent-sdk');
-
-    const startTime = Date.now();
-    let lastText = '';
-
-    for await (const message of query({
-      prompt: `Execute the build packet described in your system prompt. Work in ${worktreePath.replace(/\\/g, '/')} and follow all rules exactly.`,
-      options: {
-        cwd: worktreePath,
-        allowedTools,
-        model,
-        systemPrompt,
-        permissionMode: 'bypassPermissions',
-        maxTurns: 50,
-        maxBudgetUsd: 5.0,
-      }
-    })) {
-      // Capture result text
-      if ('result' in message && typeof message.result === 'string') {
-        lastText = message.result;
-      }
-
-      // Check timeout
-      if (Date.now() - startTime > WORKER_TIMEOUT_MS) {
-        writeFileSync(join(outputDir, 'ERROR'), 'Worker timed out', 'utf-8');
-        return { packetId, outputDir, worktreePath, branchName, outcome: 'timeout', error: 'Worker timed out' };
-      }
-    }
-
-    // Write the session output for audit
-    writeFileSync(join(outputDir, 'output.log'), lastText, 'utf-8');
-
-    // Check what the worker produced — detect validated JSON outputs, not sentinels
-    const artifactsPath = join(outputDir, 'artifacts.json');
-    const writebackPath = join(outputDir, 'writeback.json');
-    const errorPath = join(outputDir, 'ERROR');
-    const amendmentPath = join(outputDir, 'AMENDMENT');
-
-    if (existsSync(errorPath)) {
-      const errText = readFileSync(errorPath, 'utf-8').trim();
-      return { packetId, outputDir, worktreePath, branchName, outcome: 'error', error: errText };
-    } else if (existsSync(amendmentPath)) {
-      return { packetId, outputDir, worktreePath, branchName, outcome: 'amendment' };
-    } else if (existsSync(artifactsPath) && existsSync(writebackPath)) {
-      // Validate JSON is parseable and structurally correct
-      try {
-        const artifactsRaw = readFileSync(artifactsPath, 'utf-8');
-        const writebackRaw = readFileSync(writebackPath, 'utf-8');
-        const artResult = validateArtifactManifest(artifactsRaw);
-        const wbResult = validateWriteback(writebackRaw, true);
-        if ('error' in artResult) {
-          return { packetId, outputDir, worktreePath, branchName, outcome: 'error', error: `artifacts.json: ${artResult.error}` };
-        }
-        if ('error' in wbResult) {
-          return { packetId, outputDir, worktreePath, branchName, outcome: 'error', error: `writeback.json: ${wbResult.error}` };
-        }
-        return { packetId, outputDir, worktreePath, branchName, outcome: 'complete' };
-      } catch (parseErr) {
-        return { packetId, outputDir, worktreePath, branchName, outcome: 'error', error: `JSON parse error: ${parseErr}` };
-      }
-    } else {
-      // Session completed but no valid JSON outputs
-      return { packetId, outputDir, worktreePath, branchName, outcome: 'error', error: 'Session completed without producing artifacts.json and writeback.json' };
-    }
-  } catch (err) {
-    const errorMsg = err instanceof Error ? err.message : String(err);
-    writeFileSync(join(outputDir, 'ERROR'), errorMsg, 'utf-8');
-    console.error(`[multi-claude auto] SDK session error for ${packetId}: ${errorMsg}`);
-    return { packetId, outputDir, worktreePath, branchName, outcome: 'error', error: errorMsg };
+/** Map StopReason from runtime adapter to auto outcome */
+function stopReasonToOutcome(stopReason: WorkerSessionResult['stopReason']): 'complete' | 'error' | 'timeout' {
+  switch (stopReason) {
+    case 'completed': return 'complete';
+    case 'timed_out': return 'timeout';
+    case 'stopped': return 'error'; // stopped is a controlled interruption
+    default: return 'error';
   }
 }
 
@@ -445,10 +337,17 @@ async function executeAutoRun(
       console.error(`\n[multi-claude auto] === Wave ${wave.wave}/${plan.total_waves} ===`);
       console.error(`[multi-claude auto] Launching ${wave.packets.length} worker(s): ${wave.packets.map(p => p.packet_id).join(', ')}`);
 
-      // Prepare workers for this wave
-      const workerPromises: Promise<WorkerResult>[] = [];
+      // Prepare workers for this wave using runtime adapter
+      const handles: Array<{ handle: ReturnType<typeof launchWorkerSession>; pkt: WavePacket }> = [];
 
       for (const pkt of wave.packets) {
+        // Hook: evaluate before launch
+        const hookResult = emitHookEvent(dbPath, 'packet.ready', 'packet', pkt.packet_id, featureId, 'autonomous');
+        if (hookResult.decision?.action === 'stay_single') {
+          console.error(`[multi-claude auto] Hook says stay_single for ${pkt.packet_id} — skipping worker launch`);
+          continue;
+        }
+
         // Claim
         const claimResult = runClaim(dbPath, pkt.packet_id, `auto-${pkt.role}`, `auto-run-${runId}`);
         if (!claimResult.ok) {
@@ -487,50 +386,69 @@ async function executeAutoRun(
         const outputDir = join(repoRoot, '.multi-claude', 'workers', pkt.packet_id);
         mkdirSync(outputDir, { recursive: true });
 
-        // Write prompt for audit
-        writeFileSync(join(outputDir, 'prompt.md'), renderResult.result.markdown, 'utf-8');
-
         // Update worker record
         const db2 = openDb(dbPath);
         db2.prepare(`UPDATE auto_run_workers SET status = 'running', started_at = ?, worktree_path = ?, branch_name = ?, output_dir = ? WHERE run_id = ? AND packet_id = ?`)
           .run(nowISO(), wt.worktreePath, wt.branchName, outputDir, runId, pkt.packet_id);
         db2.close();
 
-        console.error(`[multi-claude auto] Launching SDK worker for ${pkt.packet_id} (${getModelForRole(pkt.role)})`);
+        const model = getModelForRole(pkt.role);
+        console.error(`[multi-claude auto] Launching SDK worker for ${pkt.packet_id} (${model}) via runtime adapter`);
 
-        // Launch as parallel promise
-        workerPromises.push(
-          runWorkerSession(pkt.packet_id, renderResult.result.markdown, wt.worktreePath, wt.branchName, outputDir, pkt.role)
-        );
+        // Launch via runtime adapter — returns handle with abort()
+        const handle = launchWorkerSession({
+          packetId: pkt.packet_id,
+          role: pkt.role,
+          model,
+          worktreePath: wt.worktreePath,
+          outputDir,
+          packetMarkdown: renderResult.result.markdown,
+          allowedTools: [],  // runtime adapter uses getToolProfile internally
+          maxTurns: 50,
+          maxBudgetUsd: 5.0,
+          timeoutMs: WORKER_TIMEOUT_MS,
+        });
+
+        // Register in session registry for external stop control
+        registerSession(runId, handle);
+        handles.push({ handle, pkt });
       }
 
       // Wait for all workers in this wave to complete (parallel execution)
-      const results = await Promise.allSettled(workerPromises);
+      const results = await Promise.allSettled(handles.map(h => h.handle.promise));
 
       // Process results
-      for (const settled of results) {
-        const result = settled.status === 'fulfilled'
-          ? settled.value
-          : { packetId: 'unknown', outputDir: '', worktreePath: '', branchName: '', outcome: 'error' as const, error: String((settled as PromiseRejectedResult).reason) };
+      for (let i = 0; i < results.length; i++) {
+        const settled = results[i]!;
+        const { pkt } = handles[i]!;
+        const packetId = pkt.packet_id;
 
-        const { packetId, outputDir: outDir, outcome } = result;
-        console.error(`[multi-claude auto] Worker ${packetId}: ${outcome}`);
+        // Unregister from session registry
+        unregisterSession(runId, packetId);
+
+        const sessionResult: WorkerSessionResult | null = settled.status === 'fulfilled' ? settled.value : null;
+        const outcome = sessionResult ? stopReasonToOutcome(sessionResult.stopReason) : 'error';
+        const error = sessionResult?.error ?? (settled.status === 'rejected' ? String((settled as PromiseRejectedResult).reason) : undefined);
+
+        console.error(`[multi-claude auto] Worker ${packetId}: ${outcome} (stopReason: ${sessionResult?.stopReason ?? 'unknown'})`);
+
+        // Emit hook event for packet result
+        emitHookEvent(dbPath, outcome === 'complete' ? 'packet.verified' : 'packet.failed', 'packet', packetId, featureId, 'autonomous');
 
         // Update worker record
         const db3 = openDb(dbPath);
         db3.prepare('UPDATE auto_run_workers SET status = ?, completed_at = ?, error = ? WHERE run_id = ? AND packet_id = ?')
-          .run(outcome === 'complete' ? 'completed' : outcome === 'timeout' ? 'timed_out' : 'failed', nowISO(), result.error ?? null, runId, packetId);
+          .run(outcome === 'complete' ? 'completed' : outcome === 'timeout' ? 'timed_out' : 'failed', nowISO(), error ?? null, runId, packetId);
         db3.close();
 
-        if (outcome === 'complete') {
+        if (outcome === 'complete' && sessionResult) {
           // Submit
-          const pktRole = wave.packets.find(p => p.packet_id === packetId)?.role ?? 'builder';
-          const submitResult = submitWorkerOutput(dbPath, packetId, outDir, `auto-${pktRole}`);
+          const submitResult = submitWorkerOutput(dbPath, packetId, sessionResult.outputDir, `auto-${pkt.role}`);
           if (submitResult.ok) {
             console.error(`[multi-claude auto] Submitted ${packetId}`);
 
             // Verify
-            const verifyResult = verifyWorkerOutput(dbPath, packetId, repoRoot, result.worktreePath);
+            const verifyResult = verifyWorkerOutput(dbPath, packetId, repoRoot, sessionResult.worktreePath);
             if (verifyResult.ok && verifyResult.result.verdict === 'pass') {
               console.error(`[multi-claude auto] Verified ${packetId}: pass`);
 
@@ -558,23 +476,19 @@ async function executeAutoRun(
             console.error(`[multi-claude auto] Submit failed for ${packetId}: ${submitResult.message}`);
             packetsFailed++;
           }
-        } else if (outcome === 'amendment') {
-          pauseReason = `Amendment required for ${packetId}`;
-          const db5 = openDb(dbPath);
-          db5.prepare('UPDATE auto_runs SET status = ?, pause_reason = ?, current_wave = ? WHERE run_id = ?')
-            .run('paused', pauseReason, wave.wave, runId);
-          db5.close();
         } else {
-          console.error(`[multi-claude auto] Worker ${outcome} for ${packetId}: ${result.error ?? 'unknown'}`);
+          console.error(`[multi-claude auto] Worker ${outcome} for ${packetId}: ${error ?? 'unknown'}`);
           packetsFailed++;
         }
       }
 
-      // Cleanup successful worktrees
-      for (const settled of results) {
-        if (settled.status === 'fulfilled' && settled.value.outcome === 'complete') {
-          try { cleanupWorktree(repoRoot, settled.value.packetId); } catch { /* ignore */ }
+      // Cleanup successful worktrees, preserve failed ones
+      for (let i = 0; i < results.length; i++) {
+        const settled = results[i]!;
+        if (settled.status === 'fulfilled' && settled.value.stopReason === 'completed') {
+          try { cleanupWorktree(repoRoot, handles[i]!.pkt.packet_id); } catch { /* ignore */ }
         }
+        // Failed/stopped worktrees are preserved per cleanup law
       }
 
       // Update wave progress
@@ -749,7 +663,7 @@ function runAutoStatus(dbPath: string, runId?: string): McfResult<StatusResult> 
 
 // ─── Stop ───────────────────────────────────────────────────────
 
-function runAutoStop(dbPath: string, runId: string): McfResult<{ run_id: string; status: string }> {
+function runAutoStop(dbPath: string, runId: string): McfResult<{ run_id: string; status: string; sessions_stopped: number }> {
   const db = openDb(dbPath);
   try {
     const run = db.prepare('SELECT status FROM auto_runs WHERE run_id = ?').get(runId) as { status: string } | undefined;
@@ -757,8 +671,16 @@ function runAutoStop(dbPath: string, runId: string): McfResult<{ run_id: string;
     if (!['running', 'paused'].includes(run.status)) {
       return mcfError('multi-claude auto stop', ERR.RUN_NOT_ACTIVE, `Run '${runId}' is '${run.status}', not active`, {});
     }
+
+    // Actually stop live SDK worker sessions
+    const { stoppedCount } = stopAllSessions(runId);
+    console.error(`[multi-claude auto] Stopped ${stoppedCount} live session(s) for run ${runId}`);
+
+    // Emit hook event
+    emitHookEvent(dbPath, 'wave.empty', 'run', runId, '', 'autonomous', { reason: 'manual_stop' });
+
     db.prepare('UPDATE auto_runs SET status = ?, completed_at = ? WHERE run_id = ?').run('stopped', nowISO(), runId);
-    return { ok: true, command: 'multi-claude auto stop', result: { run_id: runId, status: 'stopped' }, transitions: [] };
+    return { ok: true, command: 'multi-claude auto stop', result: { run_id: runId, status: 'stopped', sessions_stopped: stoppedCount }, transitions: [] };
   } finally {
     db.close();
   }
@@ -810,13 +732,30 @@ export function autoCommand(): Command {
     });
 
   cmd.command('stop')
-    .description('Gracefully stop an active run')
+    .description('Gracefully stop an active run (stops all live sessions)')
     .requiredOption('--run <id>', 'Run ID')
     .option('--db-path <path>', 'DB path', '.multi-claude/execution.db')
     .action((opts) => {
       const result = runAutoStop(opts.dbPath, opts.run);
       console.log(JSON.stringify(result, null, 2));
       if (!result.ok) process.exit(1);
+    });
+
+  cmd.command('stop-session')
+    .description('Stop a specific live worker session')
+    .requiredOption('--run <id>', 'Run ID')
+    .requiredOption('--packet <id>', 'Packet ID')
+    .option('--db-path <path>', 'DB path', '.multi-claude/execution.db')
+    .action((opts) => {
+      const result = stopSession(opts.run, opts.packet);
+      if (result.stopped) {
+        // Log hook event
+        emitHookEvent(opts.dbPath, 'packet.failed', 'packet', opts.packet, '', 'autonomous', { reason: 'manual_stop' });
+        console.log(JSON.stringify({ ok: true, command: 'multi-claude auto stop-session', result: { run_id: opts.run, packet_id: opts.packet, stopped: true } }));
+      } else {
+        console.log(JSON.stringify({ ok: false, command: 'multi-claude auto stop-session', error_code: 'SESSION_NOT_FOUND', message: result.wasRegistered ? 'Session already completed' : 'No active session found' }));
+        process.exit(1);
+      }
     });
 
   return cmd;

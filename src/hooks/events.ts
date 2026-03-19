@@ -13,7 +13,7 @@ export type HookEvent =
 
 export interface HookEventPayload {
   event: HookEvent;
-  entityType: 'feature' | 'packet' | 'wave' | 'approval';
+  entityType: 'feature' | 'packet' | 'wave' | 'approval' | 'run';
   entityId: string;
   featureId: string;
   timestamp: string;
