@@ -6,7 +6,7 @@ import { randomBytes } from 'node:crypto';
 import { runInit } from '../src/commands/init.js';
 import { runFeatureCreate, runFeatureApprove } from '../src/commands/feature.js';
 import { runPacketCreate, runPacketReady, type PacketDef } from '../src/commands/packet.js';
-import { runClaim, runProgress } from '../src/commands/claim.js';
+import { runClaim, runProgress, endAttempt } from '../src/commands/claim.js';
 import { openDb } from '../src/db/connection.js';
 
 function tempDir(): string {
@@ -241,5 +241,61 @@ describe('multi-claude progress', () => {
     } finally {
       db.close();
     }
+  });
+});
+
+describe('endAttempt', () => {
+  let dir: string;
+  let dbPath: string;
+
+  beforeEach(() => {
+    dir = tempDir();
+    dbPath = join(dir, '.multi-claude', 'execution.db');
+    runInit('mcp-tool-shop-org/GlyphStudio', dbPath);
+    seedProofFeature(dbPath);
+    runPacketReady(dbPath, ['anchor-propagation--contract-types'], 'mike');
+  });
+
+  afterEach(() => {
+    for (const ext of ['', '-wal', '-shm']) {
+      const p = dbPath + ext;
+      if (existsSync(p)) unlinkSync(p);
+    }
+  });
+
+  it('marks active attempt with end_reason and ended_at', () => {
+    runClaim(dbPath, 'anchor-propagation--contract-types', 'builder-1');
+    const result = endAttempt(dbPath, 'anchor-propagation--contract-types', 'failed');
+
+    expect(result.ok).toBe(true);
+    expect(result.alreadyEnded).toBe(false);
+    expect(result.attemptNumber).toBe(1);
+
+    const db = openDb(dbPath);
+    try {
+      const attempt = db.prepare(
+        `SELECT end_reason, ended_at FROM packet_attempts WHERE packet_id = 'anchor-propagation--contract-types' AND attempt_number = 1`
+      ).get() as { end_reason: string; ended_at: string };
+      expect(attempt.end_reason).toBe('failed');
+      expect(attempt.ended_at).toBeDefined();
+    } finally {
+      db.close();
+    }
+  });
+
+  it('is idempotent — second call returns alreadyEnded: true', () => {
+    runClaim(dbPath, 'anchor-propagation--contract-types', 'builder-1');
+    const first = endAttempt(dbPath, 'anchor-propagation--contract-types', 'failed');
+    expect(first.alreadyEnded).toBe(false);
+
+    const second = endAttempt(dbPath, 'anchor-propagation--contract-types', 'failed');
+    expect(second.ok).toBe(true);
+    expect(second.alreadyEnded).toBe(true);
+  });
+
+  it('returns alreadyEnded: true for nonexistent packet', () => {
+    const result = endAttempt(dbPath, 'nonexistent--packet-id', 'failed');
+    expect(result.ok).toBe(true);
+    expect(result.alreadyEnded).toBe(true);
   });
 });
