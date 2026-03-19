@@ -1,7 +1,9 @@
 import type { HookEventPayload } from './events.js';
 import type { EvaluatedConditions } from './conditions.js';
-import type { HookDecision } from './actions.js';
+import type { HookAction, HookDecision } from './actions.js';
 import { makeDecision } from './actions.js';
+
+export const MAX_RETRIES = 3;
 
 export type PolicyMode = 'advisory' | 'autonomous';
 
@@ -105,13 +107,13 @@ export const POLICY_RULES: PolicyRule[] = [
     evaluate: (c, e) => {
       if (c.failureClass !== 'deterministic') return null;
       if (c.failureClass === 'scope_violation' as string) return null;
-      if (c.retryCount >= 1) return null;
+      if (c.retryCount >= MAX_RETRIES) return null;
 
       return makeDecision(
         'retry_once',
         [e.entityId],
         'builder',
-        'Deterministic failure, first attempt — retry with fresh worker',
+        `Deterministic failure, attempt ${c.retryCount + 1} of ${MAX_RETRIES} — retry with fresh worker`,
       );
     },
   },
@@ -124,13 +126,31 @@ export const POLICY_RULES: PolicyRule[] = [
     mode: 'advisory',
     evaluate: (c, e) => {
       if (c.failureClass !== 'deterministic') return null;
-      if (c.retryCount < 1) return null;
+      if (c.retryCount < MAX_RETRIES) return null;
 
       return makeDecision(
         'launch_verifier',
         [e.entityId],
         'verifier-analysis',
-        'Deterministic failure after retry — launch analysis',
+        `Deterministic failure after ${MAX_RETRIES} retries — launch analysis`,
+      );
+    },
+  },
+
+  // Rule 4c: Escalate after retry limit
+  {
+    id: 'rule_4c_retry_limit',
+    name: 'Escalate after retry limit',
+    event: 'packet.failed',
+    mode: 'advisory',
+    evaluate: (c, e) => {
+      if (c.failureClass !== 'deterministic') return null;
+      if (c.retryCount < MAX_RETRIES) return null;
+      return makeDecision(
+        'escalate_human' as HookAction,
+        [e.entityId],
+        'operator',
+        `Deterministic failure after ${MAX_RETRIES} retries — escalate to human`,
       );
     },
   },

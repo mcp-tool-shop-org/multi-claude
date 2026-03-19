@@ -224,6 +224,41 @@ export function runProgress(
   }
 }
 
+export interface EndAttemptResult {
+  ok: true;
+  alreadyEnded: boolean;
+  attemptNumber?: number;
+}
+
+export function endAttempt(
+  dbPath: string,
+  packetId: string,
+  endReason: string,
+): EndAttemptResult {
+  const db = openDb(dbPath);
+  try {
+    const active = db.prepare(`
+      SELECT attempt_id, attempt_number FROM packet_attempts
+      WHERE packet_id = ? AND ended_at IS NULL
+      ORDER BY attempt_number DESC LIMIT 1
+    `).get(packetId) as { attempt_id: string; attempt_number: number } | undefined;
+
+    if (!active) {
+      return { ok: true, alreadyEnded: true };
+    }
+
+    const now = nowISO();
+    db.prepare(`
+      UPDATE packet_attempts SET end_reason = ?, ended_at = ?
+      WHERE attempt_id = ?
+    `).run(endReason, now, active.attempt_id);
+
+    return { ok: true, alreadyEnded: false, attemptNumber: active.attempt_number };
+  } finally {
+    db.close();
+  }
+}
+
 export function claimCommand(): Command {
   const cmd = new Command('claim')
     .description('Claim a packet for execution')
