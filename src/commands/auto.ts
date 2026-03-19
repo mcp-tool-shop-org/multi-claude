@@ -331,7 +331,11 @@ function submitWorkerOutput(
     return mcfError('multi-claude auto run', ERR.INVALID_WRITEBACK, `No writeback.json found for ${packetId}`, { packet_id: packetId, output_dir: outputDir });
   }
 
-  return runSubmit(dbPath, packetId, workerId, artifactsPath, writebackPath, true,
+  // Read file CONTENTS — runSubmit expects JSON strings, not file paths
+  const artifactsJson = readFileSync(artifactsPath, 'utf-8');
+  const writebackJson = readFileSync(writebackPath, 'utf-8');
+
+  return runSubmit(dbPath, packetId, workerId, artifactsJson, writebackJson, true,
     `Auto-submitted by multi-claude auto for ${packetId}`);
 }
 
