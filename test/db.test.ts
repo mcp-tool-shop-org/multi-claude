@@ -32,9 +32,9 @@ describe('Database schema', () => {
     }
   });
 
-  it('creates all 17 tables', () => {
+  it('creates all 19 tables', () => {
     const health = healthCheck(db);
-    expect(health.tables).toBe(17);
+    expect(health.tables).toBe(19);
   });
 
   it('enables WAL mode', () => {

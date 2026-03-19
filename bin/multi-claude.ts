@@ -16,6 +16,8 @@ import { autoCommand } from '../src/commands/auto.js';
 import { validateOutputCommand } from '../src/commands/validate-output.js';
 import { hooksCommand } from '../src/commands/hooks.js';
 import { fitnessCommand } from '../src/commands/fitness.js';
+import { planCommand } from '../src/commands/plan.js';
+import { blueprintCommand } from '../src/commands/blueprint.js';
 
 const program = new Command();
 
@@ -41,5 +43,7 @@ program.addCommand(autoCommand());
 program.addCommand(validateOutputCommand());
 program.addCommand(hooksCommand());
 program.addCommand(fitnessCommand());
+program.addCommand(planCommand());
+program.addCommand(blueprintCommand());
 
 program.parse();

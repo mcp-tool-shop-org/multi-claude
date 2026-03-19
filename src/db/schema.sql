@@ -450,3 +450,36 @@ CREATE TABLE IF NOT EXISTS auto_run_workers (
 
 CREATE INDEX IF NOT EXISTS idx_auto_workers_run ON auto_run_workers(run_id, wave, status);
 CREATE INDEX IF NOT EXISTS idx_auto_workers_packet ON auto_run_workers(packet_id);
+
+-- ── Run Plans (9A) ─────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS run_plans (
+  id TEXT PRIMARY KEY,
+  created_at TEXT NOT NULL,
+  version INTEGER NOT NULL DEFAULT 1,
+  input_json TEXT NOT NULL,
+  assessment_json TEXT NOT NULL,
+  override_rationale TEXT,
+  frozen INTEGER NOT NULL DEFAULT 0
+);
+
+-- ── Run Blueprints (9A) ────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS run_blueprints (
+  id TEXT PRIMARY KEY,
+  plan_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  version INTEGER NOT NULL DEFAULT 1,
+  template_id TEXT NOT NULL,
+  work_class TEXT NOT NULL,
+  repo_root TEXT NOT NULL,
+  blueprint_json TEXT NOT NULL,
+  frozen INTEGER NOT NULL DEFAULT 0,
+  frozen_at TEXT,
+  frozen_hash TEXT,
+  FOREIGN KEY (plan_id) REFERENCES run_plans(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_run_plans_frozen ON run_plans(frozen);
+CREATE INDEX IF NOT EXISTS idx_run_blueprints_plan ON run_blueprints(plan_id);
+CREATE INDEX IF NOT EXISTS idx_run_blueprints_frozen ON run_blueprints(frozen);
