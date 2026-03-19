@@ -7,6 +7,11 @@ import { statusCommand } from '../src/commands/status.js';
 import { claimCommand, progressCommand } from '../src/commands/claim.js';
 import { renderCommand } from '../src/commands/render.js';
 import { submitCommand } from '../src/commands/submit.js';
+import { verifyCommand } from '../src/commands/verify.js';
+import { approveCommand } from '../src/commands/approve.js';
+import { promoteCommand } from '../src/commands/promote.js';
+import { integrateCommand } from '../src/commands/integrate.js';
+import { expireCommand } from '../src/commands/expire.js';
 
 const program = new Command();
 
@@ -23,5 +28,10 @@ program.addCommand(claimCommand());
 program.addCommand(progressCommand());
 program.addCommand(renderCommand());
 program.addCommand(submitCommand());
+program.addCommand(verifyCommand());
+program.addCommand(approveCommand());
+program.addCommand(promoteCommand());
+program.addCommand(integrateCommand());
+program.addCommand(expireCommand());
 
 program.parse();
