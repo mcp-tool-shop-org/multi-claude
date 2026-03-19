@@ -94,6 +94,50 @@ export function completeEnvelope(
   }
 }
 
+/**
+ * Safe envelope completion for cleanup paths.
+ * Never throws — returns { ok, reason? } so cleanup errors don't mask the real problem.
+ */
+export function completeEnvelopeOnExit(
+  dbPath: string,
+  sessionId: string,
+  stopReason: StopReason,
+  error: string | null = null,
+  validationVerdict: string | null = null,
+  diffVerdict: string | null = null,
+): { ok: true } | { ok: false; reason: string } {
+  try {
+    const db = openDb(dbPath);
+    try {
+      db.exec(ENSURE_TABLE);
+      const row = db.prepare(
+        'SELECT status FROM runtime_envelopes WHERE session_id = ?',
+      ).get(sessionId) as { status: string } | undefined;
+
+      if (!row) {
+        return { ok: false, reason: `Envelope not found: ${sessionId}` };
+      }
+      if (row.status !== 'running') {
+        return { ok: false, reason: `Envelope already completed with status: ${row.status}` };
+      }
+
+      db.prepare(`
+        UPDATE runtime_envelopes
+        SET completed_at = ?, status = ?, stop_reason = ?, error = ?,
+            validation_verdict = ?, diff_reconciliation_verdict = ?
+        WHERE session_id = ?
+      `).run(nowISO(), stopReason, stopReason, error, validationVerdict, diffVerdict, sessionId);
+
+      return { ok: true };
+    } finally {
+      db.close();
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { ok: false, reason: `completeEnvelopeOnExit failed: ${message}` };
+  }
+}
+
 export function getEnvelopes(dbPath: string, runId?: string): RuntimeEnvelope[] {
   const db = openDb(dbPath);
   try {
