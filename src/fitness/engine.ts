@@ -106,7 +106,7 @@ export function scoreRun(dbPath: string, runId: string, featureId: string): RunS
 
     // Get verification results
     const verResults = db.prepare(`
-      SELECT vr.packet_id, vr.status, vr.checks_json
+      SELECT vr.packet_id, vr.status, vr.checks
       FROM verification_results vr
       JOIN packets p ON p.packet_id = vr.packet_id
       WHERE p.feature_id = ?
