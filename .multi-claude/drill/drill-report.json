@@ -1,0 +1,38 @@
+{
+  "drill": "6A-301/302 Stop Drill",
+  "timestamp": "2026-03-19T15:57:43.418Z",
+  "attempt1": {
+    "stopReason": "stopped",
+    "error": "Session aborted",
+    "startedAt": "2026-03-19T15:56:46Z",
+    "completedAt": "2026-03-19T15:56:53Z",
+    "model": "claude-haiku-4-5",
+    "role": "builder",
+    "toolProfile": [
+      "Read",
+      "Write",
+      "Edit",
+      "Bash",
+      "Glob",
+      "Grep"
+    ],
+    "checks": {
+      "stopReason_is_stopped_or_timed_out": true,
+      "startedAt_exists": true,
+      "completedAt_exists": true,
+      "outputDir_preserved": true,
+      "prompt_md_exists": true,
+      "model_recorded": true,
+      "role_recorded": true,
+      "toolProfile_recorded": true
+    },
+    "verdict": "PASS"
+  },
+  "attempt2": {
+    "stopReason": "completed",
+    "startedAt": "2026-03-19T15:56:53Z",
+    "completedAt": "2026-03-19T15:57:43Z",
+    "verdict": "PASS"
+  },
+  "overallVerdict": "PASS"
+}
