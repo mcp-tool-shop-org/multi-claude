@@ -1,6 +1,7 @@
 import { execSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import type { StopReason } from './types.js';
+import { completeEnvelopeOnExit } from './envelope.js';
 
 /**
  * Cleanup policy by outcome:
@@ -43,4 +44,48 @@ export function cleanupWorkerArtifacts(
   }
 
   return { cleaned: false, preserved };
+}
+
+/**
+ * Unified cleanup entry point for the orchestrator.
+ * Handles worktree/branch cleanup AND envelope finalization in one call.
+ */
+export function cleanupOnStop(
+  repoRoot: string,
+  packetId: string,
+  stopReason: StopReason,
+  dbPath: string,
+  sessionId?: string,
+): { cleaned: boolean; preserved: string[]; envelopeCompleted: boolean } {
+  const { cleaned, preserved } = cleanupWorkerArtifacts(repoRoot, packetId, stopReason);
+
+  let envelopeCompleted = false;
+  if (sessionId) {
+    const result = completeEnvelopeOnExit(dbPath, sessionId, stopReason);
+    envelopeCompleted = result.ok;
+  }
+
+  return { cleaned, preserved, envelopeCompleted };
+}
+
+/**
+ * Scans worktree directory for orphans not matching any known packet.
+ * Reports only — does NOT delete (deletion is an operator decision).
+ */
+export function cleanupOrphanWorktrees(
+  repoRoot: string,
+  knownPacketIds: string[],
+): { orphans: string[]; total: number } {
+  const worktreeDir = `${repoRoot}/.multi-claude/worktrees`;
+
+  if (!existsSync(worktreeDir)) {
+    return { orphans: [], total: 0 };
+  }
+
+  const entries = readdirSync(worktreeDir, { withFileTypes: true });
+  const dirs = entries.filter(e => e.isDirectory()).map(e => e.name);
+  const knownSet = new Set(knownPacketIds);
+  const orphans = dirs.filter(name => !knownSet.has(name));
+
+  return { orphans, total: dirs.length };
 }
