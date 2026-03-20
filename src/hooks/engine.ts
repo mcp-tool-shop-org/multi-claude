@@ -1,26 +1,12 @@
-import type { HookEventPayload } from './events.js';
-import type { HookDecision } from './actions.js';
+import type { HookEventPayload, HookDecision, HookDecisionLog } from '../types/actions.js';
 import type { PolicyMode } from './policy.js';
 import { evaluateConditions } from './conditions.js';
 import { evaluatePolicy } from './policy.js';
 import { openDb } from '../db/connection.js';
 import { generateId, nowISO } from '../lib/ids.js';
 
-export interface HookDecisionLog {
-  id: string;
-  timestamp: string;
-  event: string;
-  eventEntityId: string;
-  featureId: string;
-  conditionsJson: string;
-  ruleMatched: string | null;
-  action: string | null;
-  packetsJson: string;
-  mode: PolicyMode;
-  operatorDecision: 'pending' | 'confirmed' | 'rejected' | 'auto';
-  executed: boolean;
-  reason: string | null;
-}
+/** Re-export for backward compatibility */
+export type { HookDecisionLog } from '../types/actions.js';
 
 /** Process a hook event through the policy engine */
 export function processHookEvent(

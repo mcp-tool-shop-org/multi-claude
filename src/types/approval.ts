@@ -104,6 +104,12 @@ export interface ApprovalBinding {
   failedCount: number;
   unresolvedCount: number;
   boundAt: string;                      // ISO timestamp when binding was created
+
+  /** Handoff Spine traceability — present when approval consumed spine-rendered packet */
+  spineHandoffId?: string;              // exact handoff packet ID
+  spinePacketVersion?: number;          // exact packet version approved against
+  spineRenderEventId?: number;          // render event that produced the approval context
+  spineOutputHash?: string;             // hash of the rendered output the approver saw
 }
 
 // ── Approval record ────────────────────────────────────────────────

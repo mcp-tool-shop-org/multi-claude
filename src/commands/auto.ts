@@ -17,6 +17,14 @@ import { launchWorkerSession } from '../runtime/sdk-runtime.js';
 import { registerSession, unregisterSession, stopAllSessions, stopSession } from '../runtime/session-registry.js';
 import { emitHookEvent } from '../hooks/engine.js';
 import type { WorkerSessionResult, StopReason } from '../runtime/types.js';
+import { HandoffStore, migrateHandoffSchema } from '../handoff/index.js';
+import { bridgeExecutionPacket } from '../handoff/bridge/execution-to-handoff.js';
+import { createHandoff } from '../handoff/api/create-handoff.js';
+import { renderHandoff } from '../handoff/api/render-handoff.js';
+import { resolveLastValidHandoffForPacket } from '../handoff/api/resolve-handoff.js';
+import { createFallbackEvidence, type FallbackEvidence } from '../handoff/bridge/fallback-evidence.js';
+import type { HandoffId, HandoffLane } from '../handoff/schema/packet.js';
+import type { ModelAdapterName } from '../handoff/api/render-handoff.js';
 
 // ─── Types ──────────────────────────────────────────────────────
 
@@ -67,21 +75,26 @@ interface StatusResult {
   pause_reason?: string;
 }
 
-// ─── Model Routing ──────────────────────────────────────────────
+// ─── Model Routing (canonical, from types/statuses.ts) ──────────
 
-const ROLE_MODEL_MAP: Record<string, string> = {
-  coordinator: 'claude-opus-4-6',
-  architect: 'claude-opus-4-6',
-  integrator: 'claude-opus-4-6',
-  builder: 'claude-sonnet-4-6',
-  'verifier-checklist': 'claude-haiku-4-5',
-  'verifier-analysis': 'claude-sonnet-4-6',
-  knowledge: 'claude-haiku-4-5',
-  sweep: 'claude-haiku-4-5',
-};
+import { getModelForRole } from '../types/statuses.js';
 
-function getModelForRole(role: string): string {
-  return ROLE_MODEL_MAP[role] ?? 'claude-sonnet-4-6';
+// ─── Spine Helpers ──────────────────────────────────────────────
+
+/** Map SDK model string to Handoff Spine adapter name */
+function modelToAdapterName(model: string): ModelAdapterName {
+  if (model.includes('claude')) return 'claude';
+  if (model.includes('gpt') || model.includes('o1') || model.includes('o3') || model.includes('o4')) return 'gpt';
+  return 'ollama';
+}
+
+/** Map execution role to Handoff Spine lane */
+function roleToLane(role: string): HandoffLane {
+  switch (role) {
+    case 'reviewer': return 'reviewer';
+    case 'approver': return 'approver';
+    default: return 'worker';
+  }
 }
 
 // ─── Constants ──────────────────────────────────────────────────
@@ -369,12 +382,139 @@ async function executeAutoRun(
           continue;
         }
 
-        // Render packet
-        const renderResult = runRender(dbPath, pkt.packet_id);
-        if (!renderResult.ok) {
-          console.error(`[multi-claude auto] Failed to render ${pkt.packet_id}: ${renderResult.message}`);
-          packetsFailed++;
-          continue;
+        // Render packet — Handoff Spine path (Phase 2)
+        const model = getModelForRole(pkt.role);
+        let packetMarkdown = '';
+        let spineHandoffId: string | undefined;
+        let spineRenderEventId: number | undefined;
+        let fallbackEvidence: FallbackEvidence | undefined;
+
+        const spineDb = openDb(dbPath);
+        try {
+          migrateHandoffSchema(spineDb);
+          const handoffStore = new HandoffStore(spineDb);
+
+          // Phase 2 Step 2: Check for prior handoff (recovery path)
+          // If this packet was previously launched through the spine and failed,
+          // resolve the last valid version and render with recovery-renderer.
+          const priorHandoff = resolveLastValidHandoffForPacket(
+            handoffStore, pkt.packet_id, featureId,
+          );
+
+          if (priorHandoff.ok) {
+            // RECOVERY PATH — prior handoff found, render with recovery-renderer
+            spineHandoffId = priorHandoff.packet.handoffId;
+
+            const recoveryRender = renderHandoff(handoffStore, {
+              handoffId: priorHandoff.packet.handoffId as HandoffId,
+              version: priorHandoff.resolvedVersion,
+              role: 'recovery',
+              model: modelToAdapterName(model),
+            });
+
+            if (recoveryRender.ok) {
+              const parts = [recoveryRender.context.system];
+              if (recoveryRender.context.developer) parts.push(recoveryRender.context.developer);
+              packetMarkdown = parts.join('\n\n');
+              spineRenderEventId = recoveryRender.renderEventId;
+
+              // Record recovery use for audit trail
+              handoffStore.insertUse({
+                handoffId: priorHandoff.packet.handoffId,
+                packetVersion: priorHandoff.resolvedVersion,
+                renderEventId: recoveryRender.renderEventId,
+                consumerRunId: runId,
+                consumerRole: `recovery:${pkt.role}`,
+                usedAt: nowISO(),
+              });
+
+              const rollbackNote = priorHandoff.isRollback
+                ? ` (rolled back from v${priorHandoff.packet.packetVersion}, skipped ${priorHandoff.skippedVersions} invalidated)`
+                : '';
+              console.error(`[multi-claude auto] Recovery render OK for ${pkt.packet_id} → handoff ${spineHandoffId} v${priorHandoff.resolvedVersion}${rollbackNote}`);
+            } else {
+              // Recovery render failed — fall back to fresh spine render
+              console.error(`[multi-claude auto] Recovery render failed for ${pkt.packet_id}: ${recoveryRender.error}`);
+              fallbackEvidence = createFallbackEvidence(
+                pkt.packet_id, runId, 'spine_render_failed',
+                `Recovery render failed: ${recoveryRender.error}`,
+                'fresh_spine_render',
+                { attemptedHandoffId: spineHandoffId, attemptedVersion: priorHandoff.resolvedVersion },
+              );
+              // Fall through to fresh spine render below
+              spineHandoffId = undefined;
+            }
+          }
+
+          // FRESH LAUNCH PATH — no prior handoff or recovery render failed
+          if (!spineHandoffId) {
+            const bridgeResult = bridgeExecutionPacket({
+              db: spineDb,
+              packetId: pkt.packet_id,
+              runId,
+              repoRoot,
+              lane: roleToLane(pkt.role),
+            });
+
+            if (bridgeResult.ok) {
+              // Create handoff packet (derive + store)
+              const handoffResult = createHandoff(handoffStore, bridgeResult.input);
+              spineHandoffId = handoffResult.packet.handoffId;
+
+              // Render via spine chain: packet → role renderer → model adapter
+              const spineRender = renderHandoff(handoffStore, {
+                handoffId: handoffResult.packet.handoffId as HandoffId,
+                role: roleToLane(pkt.role),
+                model: modelToAdapterName(model),
+              });
+
+              if (spineRender.ok) {
+                const parts = [spineRender.context.system];
+                if (spineRender.context.developer) parts.push(spineRender.context.developer);
+                packetMarkdown = parts.join('\n\n');
+                spineRenderEventId = spineRender.renderEventId;
+
+                // Record handoff_use for audit trail
+                handoffStore.insertUse({
+                  handoffId: handoffResult.packet.handoffId,
+                  packetVersion: handoffResult.packet.packetVersion,
+                  renderEventId: spineRender.renderEventId,
+                  consumerRunId: runId,
+                  consumerRole: pkt.role,
+                  usedAt: nowISO(),
+                });
+
+                console.error(`[multi-claude auto] Spine render OK for ${pkt.packet_id} → handoff ${spineHandoffId}`);
+              } else {
+                // Spine render failed — fall back to legacy
+                fallbackEvidence = fallbackEvidence ?? createFallbackEvidence(
+                  pkt.packet_id, runId, 'spine_render_failed',
+                  `Spine render failed: ${spineRender.error}`, 'legacy_render',
+                );
+                spineHandoffId = undefined;
+              }
+            } else {
+              // Bridge failed — fall back to legacy
+              fallbackEvidence = fallbackEvidence ?? createFallbackEvidence(
+                pkt.packet_id, runId, 'bridge_failed',
+                `Bridge failed: ${bridgeResult.error}`, 'legacy_render',
+              );
+            }
+
+            // Legacy fallback (noisy — writes structured evidence)
+            if (!spineHandoffId) {
+              console.error(`[multi-claude auto] FALLBACK for ${pkt.packet_id}: ${fallbackEvidence?.reason} — ${fallbackEvidence?.detail}`);
+              const legacyResult = runRender(dbPath, pkt.packet_id);
+              if (!legacyResult.ok) {
+                console.error(`[multi-claude auto] Legacy render also failed: ${legacyResult.message}`);
+                packetsFailed++;
+                continue;
+              }
+              packetMarkdown = legacyResult.result.markdown;
+            }
+          }
+        } finally {
+          spineDb.close();
         }
 
         // Create worktree
@@ -391,13 +531,21 @@ async function executeAutoRun(
         const outputDir = join(repoRoot, '.multi-claude', 'workers', pkt.packet_id);
         mkdirSync(outputDir, { recursive: true });
 
+        // Write fallback evidence if spine path was not used
+        if (fallbackEvidence) {
+          writeFileSync(
+            join(outputDir, 'fallback-evidence.json'),
+            JSON.stringify(fallbackEvidence, null, 2),
+            'utf-8',
+          );
+        }
+
         // Update worker record
         const db2 = openDb(dbPath);
         db2.prepare(`UPDATE auto_run_workers SET status = 'running', started_at = ?, worktree_path = ?, branch_name = ?, output_dir = ? WHERE run_id = ? AND packet_id = ?`)
           .run(nowISO(), wt.worktreePath, wt.branchName, outputDir, runId, pkt.packet_id);
         db2.close();
 
-        const model = getModelForRole(pkt.role);
         console.error(`[multi-claude auto] Launching SDK worker for ${pkt.packet_id} (${model}) via runtime adapter`);
 
         // Launch via runtime adapter — returns handle with abort()
@@ -407,11 +555,13 @@ async function executeAutoRun(
           model,
           worktreePath: wt.worktreePath,
           outputDir,
-          packetMarkdown: renderResult.result.markdown,
+          packetMarkdown,
           allowedTools: [],  // runtime adapter uses getToolProfile internally
           maxTurns: 50,
           maxBudgetUsd: 5.0,
           timeoutMs: WORKER_TIMEOUT_MS,
+          handoffId: spineHandoffId,
+          renderEventId: spineRenderEventId,
         });
 
         // Register in session registry for external stop control

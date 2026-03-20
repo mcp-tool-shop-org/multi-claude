@@ -1,21 +1,5 @@
-/** Hook events emitted by CLI commands */
-export type HookEvent =
-  | 'feature.approved'
-  | 'packet.ready'
-  | 'packet.claimed'
-  | 'packet.verified'
-  | 'packet.failed'
-  | 'wave.claimable'
-  | 'wave.empty'
-  | 'integration.ready'
-  | 'approval.recorded'
-  | 'queue.stalled';
-
-export interface HookEventPayload {
-  event: HookEvent;
-  entityType: 'feature' | 'packet' | 'wave' | 'approval' | 'run';
-  entityId: string;
-  featureId: string;
-  timestamp: string;
-  metadata?: Record<string, unknown>;
-}
+/**
+ * Hook event types — re-exported from canonical types/actions.ts.
+ * Import from here or from '../types/actions.js' — both are valid.
+ */
+export type { HookEvent, HookEventPayload } from '../types/actions.js';

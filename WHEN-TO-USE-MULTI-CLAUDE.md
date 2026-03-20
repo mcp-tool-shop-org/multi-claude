@@ -1,8 +1,44 @@
-# Strict Operating Playbook
+# When to Use Multi-Claude
 
-When to use 1 Claude vs Operator + Multi-Claude vs Full Automated Multi-Claude.
+Operating doctrine for mode selection. Updated from principle to evidence after
+Phase 8 scored trials (8A backend, 8B UI, 8C infra).
 
-**Core law:** Do not pay coordination tax unless the work can return more than it costs.
+> Multi-claude works best when packet count is high enough to amortize coordination
+> overhead and file ownership is clean enough to keep semantic reconciliation bounded.
+
+---
+
+## Decision Rubric
+
+### Use multi-claude when:
+- **5+ packets** with clear file ownership and real verifier/integrator value
+- Work has natural wave structure (foundation → parallel leaves → integration)
+- The work class is backend/state/domain (strong fit at 3+ packets)
+- Independent verification materially matters (compliance, production-critical)
+
+### Be cautious when:
+- Work is **UI-heavy with only 3-4 packets** — coordination overhead likely erases parallel savings. Semantic reconciliation (wrong API assumptions) is the real cost, not git conflicts.
+- Work is **internally coupled infra with 3-4 packets** — coupling tax is real. Quality gains exist (verifier catches what integrator misses) but speed is break-even.
+- Shared CSS or seam files exist without declared section ownership
+
+### Stay single-Claude when:
+- Scaffold, unstable architecture, or tightly coupled small changes
+- Packet count is 2 or fewer (coordination overhead dominates)
+- The critical path is mostly sequential (`A → B → C → D`)
+- The operator would become the bottleneck
+- The repo floor is not stable (build/test broken, deps missing)
+
+---
+
+## Evidence Summary
+
+| Work Class | Trial | Grade | Speed | Quality | Break-even |
+|---|---|---|---|---|---|
+| Backend/state | 8A | B (capped) | Win | Neutral | ~3 packets |
+| UI/interaction | 8B | A- | Neutral | Slight win | ~5 packets |
+| Control-plane | 8C | B+ | Neutral | Slight win | ~5-6 packets |
+
+Full evidence: `docs/RUN-CLASS-FIT-MAP.md`
 
 ---
 
@@ -16,12 +52,12 @@ When to use 1 Claude vs Operator + Multi-Claude vs Full Automated Multi-Claude.
 - The main path is mostly sequential
 - The repo floor is not stable yet
 
-### Use Operator Claude + Multi-Claude when:
+### Use Operator + Multi-Claude when:
 - The floor is stable
-- The architecture is already defined enough to packetize
+- The architecture is defined enough to packetize
 - There are multiple real leaves that can move in parallel
-- The operator can manage the board without becoming the bottleneck
-- Merge law is already in place
+- File ownership can be stated cleanly per packet
+- Merge law is in place (worktree isolation, section ownership)
 - The work benefits from independent critique or verification
 
 ### Use Full Automated Multi-Claude when:
@@ -45,18 +81,21 @@ When to use 1 Claude vs Operator + Multi-Claude vs Full Automated Multi-Claude.
 - The phase depends on one dominant critical path
 - More than 50% of the work is "figure out what this repo should be"
 
-**That means:** repo bootstrap, first scaffold, workspace config, alias/test/env setup, architecture spine definition, initial protected/seam file declaration — these are NOT worker packets.
+**That means:** repo bootstrap, first scaffold, workspace config, alias/test/env setup,
+architecture spine definition, initial protected/seam file declaration — these are NOT
+worker packets.
 
 ### Pick Operator + Multi-Claude if ALL of these are true:
 - Repo floor is stable
 - Build/test commands already work
 - Domain contracts exist
 - Packet boundaries can be stated cleanly
-- There are at least 2 meaningful packets that can run in parallel
+- There are at least 3 meaningful packets that can run in parallel (evidence: 2 is rarely enough)
 - Workers can stay inside allowed files
 - Operator does not need to hand-edit every merge
 
-**Right mode for:** subsystem buildout, command families, persistence + UI in parallel, background jobs + logs UI in parallel, export backend + export UI + docs in parallel, docs/audit/hardening passes.
+**Right mode for:** subsystem buildout, command families, persistence + UI in parallel,
+hardening passes, test harness expansion.
 
 ### Pick Full Automated only if ALL of these are true:
 - Canonical packet/output schemas exist
@@ -85,41 +124,29 @@ These should almost always be done by Operator Claude, not builders:
 - Packet graph decomposition
 - Merge/integration policy changes
 - Any fix to the factory itself
+- Contract freeze authoring
 
-**If builders are discovering missing installs, broken aliases, or contradictory manifests, you are wasting worker lanes.**
-
----
-
-## Builder-Appropriate Work
-
-### Good builder packets:
-- One backend command family
-- One state/store slice
-- One UI panel family
-- One export adapter
-- One persistence adapter
-- One test packet tied to a subsystem
-- One docs packet based on completed code
-
-### Bad builder packets:
-- "Set up the entire repo"
-- "Wire the whole app"
-- "Make the architecture"
-- "Fix whatever is needed"
-- "Build all UI and tests"
-- "Make the state system and also connect backend and also fix config"
+**If builders are discovering missing installs, broken aliases, or contradictory manifests,
+you are wasting worker lanes.**
 
 ---
 
 ## Packet Sizing Law
 
-**Ideal:** 3–5 minutes of real worker time. Up to ~6 minutes for dense but lawful packets.
+**Ideal:** 3-5 minutes of real worker time. Up to 6 minutes for dense but lawful packets.
 
 **Too small:** Function-level micro packets. More orchestration than work.
 
-**Too large:** 7+ minute Sonnet packets, 50+ tool use packets, packets touching many unrelated files, packets that must invent architecture while implementing.
+**Too large:** 7+ minute packets, 50+ tool use packets, packets touching many unrelated
+files, packets that must invent architecture while implementing.
 
-**Rule:** If a packet includes layout + wiring + tests + mocks + config changes + seam file changes + docs changes all in one, it is too big.
+**Rule:** If a packet includes layout + wiring + tests + mocks + config changes + seam
+file changes + docs changes all in one, it is too big.
+
+**Break-even counts by work class:**
+- Backend: ~3 packets (low coupling, clean ownership)
+- UI: ~5 packets (moderate coupling, section ownership required)
+- Infra: ~5-6 packets (high coupling, law/wire separation required)
 
 ---
 
@@ -128,7 +155,8 @@ These should almost always be done by Operator Claude, not builders:
 Before using Multi-Claude, identify the critical path.
 
 - If the phase looks like `A → B → C → D` — parallelism is weak. Use 1 Claude.
-- If the phase looks like `A → (B, C, D parallel) → E → (F, G parallel)` — Multi-Claude can pay off.
+- If the phase looks like `A → (B, C, D parallel) → E` — Multi-Claude can pay off.
+- If the phase looks like `A → (B, C parallel) → (D, E parallel) → F` — sweet spot.
 
 ---
 
@@ -136,24 +164,14 @@ Before using Multi-Claude, identify the critical path.
 
 Multi-Claude loses when merge is manual and expensive.
 
-If merge requires repeated copy/inspect/add/commit/push/hand-merge/repair, then operator time will eat the gain.
+**Two kinds of merge friction (from Phase 8 evidence):**
+1. **Textual** — git conflicts from overlapping file edits. Prevented by clean file ownership and section declarations.
+2. **Semantic** — API shape mismatches, wrong property paths, type-cast bypasses. This is the real cost. Prevented by stable domain floor (serial Wave 1) and explicit integrator budget.
 
 **Use Multi-Claude only when:**
-- Merge is automated or near-automated
-- Seam files are limited
-- Integration is a real packet, not operator improvisation
-
----
-
-## Contradiction Rule
-
-Never launch workers with contradictory packet law.
-
-Examples:
-- "Do not touch lib.rs" but also "register commands there"
-- "Do not modify App.tsx" but also "wire the app there"
-
-**When a packet contradicts itself:** do not launch it. Amend the packet first, or split the integration step cleanly.
+- Worktree isolation is real (non-negotiable — 8A proved this)
+- Seam files have declared section ownership
+- Integration is a real packet with budgeted semantic reconciliation time
 
 ---
 
@@ -165,65 +183,30 @@ Only use Multi-Claude on a phase if these are ALL true:
 - [ ] Dependencies installed
 - [ ] Manifests/config are stable
 - [ ] Protected files declared
-- [ ] Seam files declared
-- [ ] Verification profiles declared
-- [ ] Packet graph exists
-- [ ] Packet output schema is canonical
-- [ ] Submit validator matches worker contract
-- [ ] Merge path is lawful
-- [ ] At least two independent packets exist
+- [ ] Seam files declared with section ownership
+- [ ] Packet graph exists with allowed/forbidden file lists
+- [ ] Worktree isolation works (smoke check)
+- [ ] At least 3 independent packets exist
+- [ ] Pre-Wave-2 hard gate is defined
 
 If not, use 1 Claude / Operator Claude first.
-
----
-
-## Mode Selection by Phase Type
-
-| Phase Type | Mode | Why |
-|------------|------|-----|
-| Repo birth / foundation spine | 1 Claude | Too much global context, setup deps, critical path |
-| New subsystem with stable foundation | Operator + Multi-Claude | Sweet spot for parallel leaves |
-| Hardening / audit / remediation | Full or semi-automated Multi-Claude | Factory systems shine here |
-| Cross-cutting refactor (uncertain) | 1 Claude | Architecture still uncertain, many shared files |
-| Cross-cutting refactor (plan locked) | Operator + Multi-Claude | Packets split by subsystem, integrator reconciles |
-
----
-
-## Anti-Patterns
-
-Stop if you see these:
-1. Using builders for scaffold — wrong, operator work
-2. Sending unstable env/config to workers — stabilize floor first
-3. Giant UI packet — split layout from wiring/tests
-4. Manual merge after every packet — automation gap, fix the system
-5. Using Multi-Claude because it "sounds more advanced" — wrong metric
-6. One orchestrator doing every role and calling it independent — not the real thing
-7. Keeping packet contradictions and hoping workers infer intent — fix the packet
 
 ---
 
 ## Performance Diagnosis
 
 When Multi-Claude is slower than 1 Claude, ask:
-1. Was the work mostly sequential?
-2. Was scaffold/operator work mistakenly given to workers?
-3. Were packets too large?
-4. Was merge too manual?
-5. Were there environment/setup misses?
-6. Were packet contracts contradictory?
-7. Did the operator become the bottleneck?
+1. Was the packet count too low for the work class? (Below break-even)
+2. Was the work mostly sequential?
+3. Were shared files missing section ownership? (Semantic mismatch)
+4. Did workers use type casts (`as X`) to bypass missing types? (Coupling leak)
+5. Were packets too large?
+6. Was merge too manual?
+7. Were packet contracts contradictory?
+8. Did the operator become the bottleneck?
 
-If yes, the lesson is not "factory is bad." The lesson is "wrong phase shape and too much coordination tax."
-
----
-
-## Default Operating Pattern
-
-**Step 1:** Use 1 Claude / Operator Claude to scaffold repo, install deps, fix config, set up tests, lock architecture spine, declare protected/seam files.
-
-**Step 2:** Switch to Multi-Claude when contracts exist, at least 2 good parallel packets exist, and merge law is stable.
-
-**Step 3:** Use full automated Multi-Claude only after manual and semi-manual runs have proven the path.
+If yes, the lesson is not "factory is bad." The lesson is "wrong phase shape or
+insufficient packet discipline for this work class."
 
 ---
 
@@ -232,7 +215,9 @@ If yes, the lesson is not "factory is bad." The lesson is "wrong phase shape and
 Do not use Multi-Claude to make work feel more impressive. Use it only when:
 - The work is truly parallelizable
 - The floor is stable
+- The packet count justifies the coordination overhead for this work class
+- File ownership is clean enough to keep semantic reconciliation bounded
 - The operator is not the bottleneck
-- The merge path is not manual sludge
 
-Otherwise, one Claude is better. And that is not a failure. That is disciplined use of the right tool for the phase.
+Otherwise, one Claude is better. And that is not a failure. That is disciplined
+use of the right tool for the work class.

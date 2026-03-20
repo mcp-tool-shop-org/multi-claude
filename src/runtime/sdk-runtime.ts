@@ -78,6 +78,15 @@ export function launchWorkerSession(config: WorkerConfig): WorkerSessionHandle {
   writeFileSync(join(config.outputDir, 'system-prompt.md'), systemPrompt, 'utf-8');
   writeFileSync(join(config.outputDir, 'prompt-hash.txt'), hashPrompt(systemPrompt), 'utf-8');
 
+  // Handoff Spine audit — record spine traceability when available
+  if (config.handoffId) {
+    writeFileSync(join(config.outputDir, 'handoff-spine.json'), JSON.stringify({
+      handoffId: config.handoffId,
+      renderEventId: config.renderEventId ?? null,
+      renderedViaSpine: true,
+    }), 'utf-8');
+  }
+
   const promise = (async (): Promise<WorkerSessionResult> => {
     const makeResult = (stopReason: StopReason, error?: string): WorkerSessionResult => ({
       packetId: config.packetId,

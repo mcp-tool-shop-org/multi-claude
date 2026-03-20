@@ -18,6 +18,8 @@ import { hooksCommand } from '../src/commands/hooks.js';
 import { fitnessCommand } from '../src/commands/fitness.js';
 import { planCommand } from '../src/commands/plan.js';
 import { blueprintCommand } from '../src/commands/blueprint.js';
+import { consoleCommand } from '../src/commands/console.js';
+import { handoffCommand } from '../src/handoff/cli/handoff-command.js';
 
 const program = new Command();
 
@@ -45,5 +47,7 @@ program.addCommand(hooksCommand());
 program.addCommand(fitnessCommand());
 program.addCommand(planCommand());
 program.addCommand(blueprintCommand());
+program.addCommand(consoleCommand());
+program.addCommand(handoffCommand());
 
 program.parse();

@@ -10,6 +10,10 @@ export interface WorkerConfig {
   maxTurns: number;
   maxBudgetUsd: number;
   timeoutMs: number;
+
+  /** Handoff Spine audit fields — present when launched via spine rendering chain */
+  handoffId?: string;
+  renderEventId?: number;
 }
 
 /** Normalized session exit status */

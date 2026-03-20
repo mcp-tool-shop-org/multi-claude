@@ -25,6 +25,10 @@ import { recordApproval, getLatestApproval, invalidateApproval } from './approva
 import { recordAudit } from './audit-trail.js';
 import { deriveRunHandoff } from './run-handoff.js';
 import { nowISO } from '../lib/ids.js';
+import { openDb } from '../db/connection.js';
+import { HandoffStore, migrateHandoffSchema } from '../handoff/index.js';
+import { resolveApprovalHandoff } from '../handoff/api/resolve-approval-handoff.js';
+import type { ModelAdapterName } from '../handoff/api/render-handoff.js';
 
 // ── Public types ────────────────────────────────────────────────────
 
@@ -117,8 +121,11 @@ export function executeApprove(input: ApproveInput): ApproveResult {
     };
   }
 
-  // Create binding
-  const binding = createBinding(handoff, promotionCheck);
+  // Resolve spine handoff for approval traceability (records handoff_use)
+  const spine = trySpineResolution(input.dbPath, handoff.runId, 'approver');
+
+  // Create binding (with spine traceability if available)
+  const binding = createBinding(handoff, promotionCheck, spine);
 
   // Record approval
   const approval = recordApproval(input.dbPath, {
@@ -161,7 +168,8 @@ export function executeReject(input: RejectInput): RejectResult | null {
   if (!handoff) return null;
 
   const promotionCheck = checkPromotion(handoff);
-  const binding = createBinding(handoff, promotionCheck);
+  const spine = trySpineResolution(input.dbPath, handoff.runId, 'approver');
+  const binding = createBinding(handoff, promotionCheck, spine);
 
   const approval = recordApproval(input.dbPath, {
     runId: handoff.runId,
@@ -237,11 +245,66 @@ export function checkApprovalStatus(dbPath: string, runId?: string): ApprovalSta
   };
 }
 
+// ── Spine traceability ──────────────────────────────────────────────
+
+interface SpineTraceability {
+  spineHandoffId: string;
+  spinePacketVersion: number;
+  spineRenderEventId: number | undefined;
+  spineOutputHash: string;
+}
+
+/**
+ * Try to resolve spine handoff for approval.
+ * Returns traceability data if spine handoff exists, null otherwise.
+ */
+function trySpineResolution(
+  dbPath: string,
+  runId: string,
+  role: 'reviewer' | 'approver',
+): SpineTraceability | null {
+  const db = openDb(dbPath);
+  try {
+    migrateHandoffSchema(db);
+    const store = new HandoffStore(db);
+
+    // Find handoffs for this run
+    const handoffs = store.findHandoffsByRunId(runId);
+    if (handoffs.length === 0) return null;
+
+    // Use the most recent handoff for this run
+    const handoffRecord = handoffs[0]!;
+
+    const result = resolveApprovalHandoff(store, {
+      handoffId: handoffRecord.handoffId,
+      role,
+      model: 'claude' as ModelAdapterName,
+      consumerRunId: runId,
+      consumerRole: `${role}:approval`,
+    });
+
+    if (!result.ok) return null;
+
+    return {
+      spineHandoffId: result.handoffId,
+      spinePacketVersion: result.packetVersion,
+      spineRenderEventId: result.renderEventId,
+      spineOutputHash: result.outputHash,
+    };
+  } catch {
+    // Spine tables may not exist or other DB issues — fall through silently
+    return null;
+  } finally {
+    db.close();
+  }
+}
+
 // ── Internal helpers ────────────────────────────────────────────────
 
 function createBinding(
   handoff: RunHandoff,
   promotionCheck: PromotionCheckResult,
+  spine?: SpineTraceability | null,
 ): ApprovalBinding {
   return {
     runId: handoff.runId,
@@ -252,6 +315,11 @@ function createBinding(
     failedCount: handoff.failedContributions,
     unresolvedCount: handoff.reviewBlockingIssues,
     boundAt: nowISO(),
+    // Spine traceability — present when spine handoff was resolved
+    spineHandoffId: spine?.spineHandoffId,
+    spinePacketVersion: spine?.spinePacketVersion,
+    spineRenderEventId: spine?.spineRenderEventId,
+    spineOutputHash: spine?.spineOutputHash,
   };
 }
 
