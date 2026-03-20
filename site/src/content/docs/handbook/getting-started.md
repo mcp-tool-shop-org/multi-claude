@@ -83,5 +83,5 @@ This produces a review-ready brief with verdict, contributions, interventions, o
 
 ## What's Next
 
-- [Planning](/mcf/handbook/planning/) — Deep dive into fitness assessment and blueprint design
-- [Console Reference](/mcf/handbook/console/) — All 18 console sub-commands explained
+- [Planning](/multi-claude/handbook/planning/) — Deep dive into fitness assessment and blueprint design
+- [Console Reference](/multi-claude/handbook/console/) — All 18 console sub-commands explained

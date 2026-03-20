@@ -42,4 +42,4 @@ Report security issues to: `64996768+mcp-tool-shop@users.noreply.github.com`
 - Assessment: within 7 days
 - Fix (if confirmed): within 30 days
 
-See [SECURITY.md](https://github.com/mcp-tool-shop-org/mcf/blob/main/SECURITY.md) for the full policy.
+See [SECURITY.md](https://github.com/mcp-tool-shop-org/multi-claude/blob/main/SECURITY.md) for the full policy.

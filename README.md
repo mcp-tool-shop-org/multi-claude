@@ -3,9 +3,9 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/mcp-tool-shop-org/mcf/actions"><img src="https://github.com/mcp-tool-shop-org/mcf/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-  <a href="https://github.com/mcp-tool-shop-org/mcf/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License" /></a>
-  <a href="https://mcp-tool-shop-org.github.io/mcf/"><img src="https://img.shields.io/badge/docs-landing%20page-blue" alt="Landing Page" /></a>
+  <a href="https://github.com/mcp-tool-shop-org/multi-claude/actions"><img src="https://github.com/mcp-tool-shop-org/multi-claude/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://github.com/mcp-tool-shop-org/multi-claude/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License" /></a>
+  <a href="https://mcp-tool-shop-org.github.io/multi-claude/"><img src="https://img.shields.io/badge/docs-landing%20page-blue" alt="Landing Page" /></a>
 </p>
 
 Lane-based parallel build system for [Claude Code](https://claude.ai/). Orchestrates multiple Claude sessions working on the same codebase — with dependency resolution, file ownership, operator intervention, and evidence-bound handoff.

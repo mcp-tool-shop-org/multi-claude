@@ -5,13 +5,13 @@ import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
   site: 'https://mcp-tool-shop-org.github.io',
-  base: '/mcf',
+  base: '/multi-claude',
   integrations: [
     starlight({
       title: 'Multi-Claude',
       disable404Route: true,
       social: [
-        { icon: 'github', label: 'GitHub', href: 'https://github.com/mcp-tool-shop-org/mcf' },
+        { icon: 'github', label: 'GitHub', href: 'https://github.com/mcp-tool-shop-org/multi-claude' },
       ],
       sidebar: [
         { label: 'Handbook', autogenerate: { directory: 'handbook' } },

@@ -31,8 +31,8 @@ Every run follows the same six-step loop:
 
 ## Quick Links
 
-- [Getting Started](/mcf/handbook/getting-started/) — Install and run your first build
-- [Planning](/mcf/handbook/planning/) — Fitness assessment and blueprint creation
-- [Console Reference](/mcf/handbook/console/) — All 18 console sub-commands
-- [Architecture](/mcf/handbook/architecture/) — System design and the 12-law handoff spine
-- [Security](/mcf/handbook/security/) — Threat model and permissions
+- [Getting Started](/multi-claude/handbook/getting-started/) — Install and run your first build
+- [Planning](/multi-claude/handbook/planning/) — Fitness assessment and blueprint creation
+- [Console Reference](/multi-claude/handbook/console/) — All 18 console sub-commands
+- [Architecture](/multi-claude/handbook/architecture/) — System design and the 12-law handoff spine
+- [Security](/multi-claude/handbook/security/) — Threat model and permissions

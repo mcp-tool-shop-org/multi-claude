@@ -5,7 +5,7 @@ export const config: SiteConfig = {
   description: 'Lane-based parallel build system for Claude Code. Orchestrates multiple sessions with dependency resolution, operator intervention, and evidence-bound handoff.',
   logoBadge: 'MC',
   brandName: 'Multi-Claude',
-  repoUrl: 'https://github.com/mcp-tool-shop-org/mcf',
+  repoUrl: 'https://github.com/mcp-tool-shop-org/multi-claude',
   npmUrl: 'https://www.npmjs.com/package/@multi-claude/cli',
   footerText: 'MIT Licensed — built by <a href="https://github.com/mcp-tool-shop-org" style="color:var(--color-muted);text-decoration:underline">mcp-tool-shop-org</a>',
 
