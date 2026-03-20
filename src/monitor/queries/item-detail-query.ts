@@ -13,7 +13,9 @@ import type { PolicyStore } from '../../handoff/policy/policy-store.js';
 import type { OutcomeStore } from '../../handoff/outcome/outcome-store.js';
 import type { PromotionStore } from '../../handoff/promotion/promotion-store.js';
 import type { HandoffStore } from '../../handoff/store/handoff-store.js';
-import type { ItemDetailView, TimelineEvent } from '../types.js';
+import type { ItemDetailView, TimelineEvent, BriefWorkbenchView } from '../types.js';
+import { computeEligibility } from '../policies/action-eligibility.js';
+import { computeDecisionAffordance } from '../policies/decision-eligibility.js';
 
 export interface ItemDetailStores {
   queueStore: QueueStore;
@@ -89,6 +91,41 @@ export function queryItemDetail(
   // Build timeline
   const timeline = buildTimeline(stores, queueItemId);
 
+  // Build workbench view (full brief projection)
+  const workbench: BriefWorkbenchView | null = brief ? {
+    briefId: brief.briefId,
+    role: brief.role,
+    handoffId: brief.handoffId,
+    packetVersion: brief.packetVersion,
+    baselinePacketVersion: brief.baselinePacketVersion,
+    briefVersion: brief.briefVersion,
+    createdAt: brief.createdAt,
+    summary: brief.summary,
+    deltaSummary: brief.deltaSummary ?? [],
+    blockers: (brief.blockers ?? []).map(b => ({
+      code: b.code,
+      severity: b.severity,
+      summary: b.summary,
+    })),
+    evidenceCoverage: brief.evidenceCoverage ?? {
+      fingerprint: '',
+      requiredArtifacts: [],
+      presentArtifacts: [],
+      missingArtifacts: [],
+    },
+    eligibility: brief.eligibility ?? {
+      allowedActions: [],
+      recommendedAction: 'needs-review' as const,
+      rationale: [],
+    },
+    risks: brief.risks ?? [],
+    openLoops: brief.openLoops ?? [],
+    decisionRefs: brief.decisionRefs ?? [],
+  } : null;
+
+  // Decision affordance (operator-gated)
+  const decisionAffordance = computeDecisionAffordance({ queueStore, supervisorStore }, queueItemId);
+
   return {
     queueItemId: item.queueItemId,
     handoffId: item.handoffId,
@@ -159,6 +196,9 @@ export function queryItemDetail(
       isTrialPolicy,
       promotionId: trialPromotion?.promotionId ?? null,
     },
+    actions: computeEligibility({ queueStore, supervisorStore }, queueItemId),
+    workbench,
+    decisionAffordance,
     timeline,
   };
 }

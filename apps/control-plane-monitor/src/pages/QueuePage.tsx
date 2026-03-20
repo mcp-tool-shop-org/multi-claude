@@ -1,7 +1,15 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useApi, timeAgo } from '../hooks/useApi';
-import type { QueueListItem, RoutingLane } from '../lib/types';
+import { useActions } from '../hooks/useActions';
+import { QueueActionMenu } from '../components/actions/QueueActionMenu';
+import { ClaimDialog } from '../components/actions/ClaimDialog';
+import { ReleaseDialog } from '../components/actions/ReleaseDialog';
+import { DeferDialog } from '../components/actions/DeferDialog';
+import { RequeueDialog } from '../components/actions/RequeueDialog';
+import { EscalateDialog } from '../components/actions/EscalateDialog';
+import { ActionToast } from '../components/actions/ActionToast';
+import type { QueueListItem, RoutingLane, OperatorAction } from '../lib/types';
 
 const LANES: RoutingLane[] = ['reviewer', 'approver', 'recovery', 'escalated_review'];
 
@@ -17,7 +25,17 @@ export function QueuePage() {
   params.set('limit', '100');
 
   const qs = params.toString();
-  const { data, loading, error } = useApi<QueueListItem[]>(`/api/queue?${qs}`);
+  const { data, loading, error, refetch } = useApi<QueueListItem[]>(`/api/queue?${qs}`);
+
+  const actions = useActions(undefined, refetch);
+  const [dialogState, setDialogState] = useState<{ action: OperatorAction; queueItemId: string } | null>(null);
+
+  const handleAction = (queueItemId: string, action: OperatorAction) => {
+    actions.clearResult();
+    setDialogState({ action, queueItemId });
+  };
+
+  const closeDialog = () => setDialogState(null);
 
   return (
     <div className="space-y-4">
@@ -78,6 +96,7 @@ export function QueuePage() {
                 <th className="text-left px-3 py-2 font-medium">Flow</th>
                 <th className="text-left px-3 py-2 font-medium">Outcome</th>
                 <th className="text-left px-3 py-2 font-medium">Age</th>
+                <th className="text-left px-3 py-2 font-medium">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -117,11 +136,18 @@ export function QueuePage() {
                   <td className="px-3 py-2 text-gray-500 whitespace-nowrap">
                     {timeAgo(item.createdAt)}
                   </td>
+                  <td className="px-3 py-2">
+                    <QueueActionMenu
+                      actions={item.actions}
+                      onAction={(action) => handleAction(item.queueItemId, action)}
+                      pending={actions.state.pending}
+                    />
+                  </td>
                 </tr>
               ))}
               {data.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-3 py-8 text-center text-gray-600">
+                  <td colSpan={10} className="px-3 py-8 text-center text-gray-600">
                     No items match filters
                   </td>
                 </tr>
@@ -130,6 +156,59 @@ export function QueuePage() {
           </table>
         </div>
       )}
+
+      {/* Action Dialogs */}
+      {dialogState && (
+        <>
+          <ClaimDialog
+            open={dialogState.action === 'claim'}
+            queueItemId={dialogState.queueItemId}
+            onClose={closeDialog}
+            onConfirm={async () => { await actions.claim(dialogState.queueItemId); closeDialog(); }}
+            submitting={actions.state.pending}
+            error={actions.state.lastError}
+          />
+          <ReleaseDialog
+            open={dialogState.action === 'release'}
+            queueItemId={dialogState.queueItemId}
+            onClose={closeDialog}
+            onConfirm={async (reason) => { await actions.release(dialogState.queueItemId, reason); closeDialog(); }}
+            submitting={actions.state.pending}
+            error={actions.state.lastError}
+          />
+          <DeferDialog
+            open={dialogState.action === 'defer'}
+            queueItemId={dialogState.queueItemId}
+            onClose={closeDialog}
+            onConfirm={async (reason, until) => { await actions.defer(dialogState.queueItemId, reason, until); closeDialog(); }}
+            submitting={actions.state.pending}
+            error={actions.state.lastError}
+          />
+          <RequeueDialog
+            open={dialogState.action === 'requeue'}
+            queueItemId={dialogState.queueItemId}
+            onClose={closeDialog}
+            onConfirm={async (reason) => { await actions.requeue(dialogState.queueItemId, reason); closeDialog(); }}
+            submitting={actions.state.pending}
+            error={actions.state.lastError}
+          />
+          <EscalateDialog
+            open={dialogState.action === 'escalate'}
+            queueItemId={dialogState.queueItemId}
+            onClose={closeDialog}
+            onConfirm={async (reason, target) => { await actions.escalate(dialogState.queueItemId, reason, target); closeDialog(); }}
+            submitting={actions.state.pending}
+            error={actions.state.lastError}
+          />
+        </>
+      )}
+
+      {/* Action feedback toast */}
+      <ActionToast
+        result={actions.state.lastResult}
+        error={actions.state.lastError}
+        onDismiss={actions.clearResult}
+      />
     </div>
   );
 }

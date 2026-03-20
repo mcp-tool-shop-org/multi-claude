@@ -10,6 +10,7 @@ import type { RoutingStore } from '../../handoff/routing/routing-store.js';
 import type { FlowStore } from '../../handoff/flow/flow-store.js';
 import type { OutcomeStore } from '../../handoff/outcome/outcome-store.js';
 import type { QueueListItem, QueueListFilters } from '../types.js';
+import { computeEligibility } from '../policies/action-eligibility.js';
 
 export interface QueueQueryStores {
   queueStore: QueueStore;
@@ -75,6 +76,8 @@ export function queryQueueList(
 
       hasOutcome: !!outcome,
       outcomeStatus: outcome?.status ?? null,
+
+      actions: computeEligibility({ queueStore, supervisorStore }, item.queueItemId),
     };
   });
 

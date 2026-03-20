@@ -6,3 +6,7 @@ dist/
 .mcf/
 coverage/
 .env
+site/.astro/
+site/dist/
+site/node_modules/
+.polyglot-cache.json

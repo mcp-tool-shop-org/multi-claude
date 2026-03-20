@@ -5,5 +5,11 @@ export default defineConfig({
     include: ['test/**/*.test.ts'],
     globals: true,
     testTimeout: 10_000,
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'lcov'],
+      include: ['src/**/*.ts'],
+      exclude: ['src/**/*.d.ts'],
+    },
   },
 });

@@ -1,7 +1,7 @@
 {
   "name": "@multi-claude/cli",
-  "version": "0.1.0",
-  "description": "Multi-Claude — lane-based parallel build system",
+  "version": "1.0.0",
+  "description": "Multi-Claude — lane-based parallel build system for Claude Code",
   "type": "module",
   "bin": {
     "multi-claude": "./dist/bin/multi-claude.js"
@@ -13,6 +13,7 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/ test/",
+    "verify": "npm run typecheck && npm run test && npm run build",
     "multi-claude": "tsx bin/multi-claude.ts"
   },
   "keywords": [
@@ -26,6 +27,7 @@
     "@types/better-sqlite3": "^7.6.12",
     "@types/express": "^5.0.6",
     "@types/node": "^22.0.0",
+    "@vitest/coverage-v8": "^4.1.0",
     "eslint": "^9.0.0",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",

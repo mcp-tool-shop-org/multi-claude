@@ -56,6 +56,80 @@ export interface TrialSummary {
   scope: string;
 }
 
+// ── Action Eligibility ──────────────────────────────────────────────
+
+export type OperatorAction = 'claim' | 'release' | 'defer' | 'requeue' | 'escalate';
+
+export interface ActionEligibilityEntry {
+  allowed: boolean;
+  reason?: string;
+}
+
+export type ActionEligibility = Record<OperatorAction, ActionEligibilityEntry>;
+
+// ── Command Types ──────────────────────────────────────────────────
+
+export interface MonitorCommandResponse {
+  ok: boolean;
+  action: OperatorAction;
+  queueItemId: string;
+  eventId?: string;
+  error?: {
+    code: string;
+    message: string;
+  };
+}
+
+// ── Decision Types (Phase 13C) ─────────────────────────────────────
+
+export type DecisionAction = 'approve' | 'reject' | 'request-recovery' | 'needs-review';
+
+export interface BriefWorkbenchView {
+  briefId: string;
+  role: 'reviewer' | 'approver';
+  handoffId: string;
+  packetVersion: number;
+  baselinePacketVersion: number | null;
+  briefVersion: string;
+  createdAt: string;
+  summary: string;
+  deltaSummary: string[];
+  blockers: Array<{ code: string; severity: string; summary: string }>;
+  evidenceCoverage: {
+    fingerprint: string;
+    requiredArtifacts: string[];
+    presentArtifacts: string[];
+    missingArtifacts: string[];
+  };
+  eligibility: {
+    allowedActions: DecisionAction[];
+    recommendedAction: DecisionAction;
+    rationale: string[];
+  };
+  risks: string[];
+  openLoops: string[];
+  decisionRefs: string[];
+}
+
+export interface DecisionAffordance {
+  decisionEnabled: boolean;
+  disabledReason: string | null;
+  hasActiveClaim: boolean;
+  claimedByOperator: boolean;
+}
+
+export interface DecisionCommandResponse {
+  ok: boolean;
+  action: string;
+  queueItemId: string;
+  actionId?: string;
+  newStatus?: string;
+  error?: {
+    code: string;
+    message: string;
+  };
+}
+
 // ── Queue List ──────────────────────────────────────────────────────
 
 export interface QueueListItem {
@@ -76,6 +150,7 @@ export interface QueueListItem {
   lastUpdatedAt: string;
   hasOutcome: boolean;
   outcomeStatus: string | null;
+  actions: ActionEligibility;
 }
 
 // ── Item Detail ─────────────────────────────────────────────────────
@@ -155,6 +230,9 @@ export interface ItemDetailView {
     isTrialPolicy: boolean;
     promotionId: string | null;
   };
+  actions: ActionEligibility;
+  workbench: BriefWorkbenchView | null;
+  decisionAffordance: DecisionAffordance;
   timeline: TimelineEvent[];
 }
 

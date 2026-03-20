@@ -27,6 +27,16 @@ import { queryLaneHealth, queryAllLaneHealth } from './queries/lane-health-query
 import { queryActivity } from './queries/activity-query.js';
 import type { RoutingLane } from '../handoff/routing/types.js';
 import { ALL_LANES } from '../handoff/routing/types.js';
+import { executeClaimItem } from './commands/claim-item.js';
+import { executeReleaseItem } from './commands/release-item.js';
+import { executeDeferItem } from './commands/defer-item.js';
+import { executeRequeueItem } from './commands/requeue-item.js';
+import { executeEscalateItem } from './commands/escalate-item.js';
+import { executeDecision } from './commands/decide-item.js';
+import type {
+  ClaimItemRequest, ReleaseItemRequest, DeferItemRequest,
+  RequeueItemRequest, EscalateItemRequest, DecisionRequest,
+} from './types.js';
 
 export interface MonitorServerOptions {
   dbPath: string;
@@ -70,10 +80,14 @@ export function createMonitorServer(opts: MonitorServerOptions): express.Express
   const stores = openStores(opts.dbPath);
   const app = express();
 
+  // JSON body parsing for command endpoints
+  app.use(express.json());
+
   // CORS for local development
   app.use((_req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
     res.header('Access-Control-Allow-Headers', 'Content-Type');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
     next();
   });
 
@@ -162,6 +176,101 @@ export function createMonitorServer(opts: MonitorServerOptions): express.Express
       res.json(events);
     } catch (err) {
       res.status(500).json({ error: String(err) });
+    }
+  });
+
+  // ── Command routes (operator intents) ──────────────────────────
+
+  // Claim
+  app.post('/api/monitor/queue/:queueItemId/claim', (req, res) => {
+    try {
+      const body = req.body as ClaimItemRequest;
+      if (!body?.operatorId) {
+        res.status(400).json({ ok: false, error: { code: 'missing_field', message: 'operatorId is required' } });
+        return;
+      }
+      const result = executeClaimItem(stores.queueStore, stores.supervisorStore, req.params.queueItemId!, body);
+      res.status(result.ok ? 200 : 409).json(result);
+    } catch (err) {
+      res.status(500).json({ ok: false, error: { code: 'internal', message: String(err) } });
+    }
+  });
+
+  // Release
+  app.post('/api/monitor/queue/:queueItemId/release', (req, res) => {
+    try {
+      const body = req.body as ReleaseItemRequest;
+      if (!body?.operatorId) {
+        res.status(400).json({ ok: false, error: { code: 'missing_field', message: 'operatorId is required' } });
+        return;
+      }
+      const result = executeReleaseItem(stores.queueStore, stores.supervisorStore, req.params.queueItemId!, body);
+      res.status(result.ok ? 200 : 409).json(result);
+    } catch (err) {
+      res.status(500).json({ ok: false, error: { code: 'internal', message: String(err) } });
+    }
+  });
+
+  // Defer
+  app.post('/api/monitor/queue/:queueItemId/defer', (req, res) => {
+    try {
+      const body = req.body as DeferItemRequest;
+      if (!body?.operatorId || !body?.reason) {
+        res.status(400).json({ ok: false, error: { code: 'missing_field', message: 'operatorId and reason are required' } });
+        return;
+      }
+      const result = executeDeferItem(stores.supervisorStore, req.params.queueItemId!, body);
+      res.status(result.ok ? 200 : 409).json(result);
+    } catch (err) {
+      res.status(500).json({ ok: false, error: { code: 'internal', message: String(err) } });
+    }
+  });
+
+  // Requeue
+  app.post('/api/monitor/queue/:queueItemId/requeue', (req, res) => {
+    try {
+      const body = req.body as RequeueItemRequest;
+      if (!body?.operatorId) {
+        res.status(400).json({ ok: false, error: { code: 'missing_field', message: 'operatorId is required' } });
+        return;
+      }
+      const result = executeRequeueItem(stores.queueStore, stores.supervisorStore, req.params.queueItemId!, body);
+      res.status(result.ok ? 200 : 409).json(result);
+    } catch (err) {
+      res.status(500).json({ ok: false, error: { code: 'internal', message: String(err) } });
+    }
+  });
+
+  // Escalate
+  app.post('/api/monitor/queue/:queueItemId/escalate', (req, res) => {
+    try {
+      const body = req.body as EscalateItemRequest;
+      if (!body?.operatorId || !body?.reason) {
+        res.status(400).json({ ok: false, error: { code: 'missing_field', message: 'operatorId and reason are required' } });
+        return;
+      }
+      const result = executeEscalateItem(stores.supervisorStore, req.params.queueItemId!, body);
+      res.status(result.ok ? 200 : 409).json(result);
+    } catch (err) {
+      res.status(500).json({ ok: false, error: { code: 'internal', message: String(err) } });
+    }
+  });
+
+  // Decide (Phase 13C)
+  app.post('/api/monitor/queue/:queueItemId/decide', (req, res) => {
+    try {
+      const body = req.body as DecisionRequest;
+      if (!body?.operatorId || !body?.action || !body?.reason) {
+        res.status(400).json({ ok: false, error: { code: 'missing_field', message: 'operatorId, action, and reason are required' } });
+        return;
+      }
+      const result = executeDecision(
+        stores.handoffStore, stores.queueStore, stores.supervisorStore,
+        req.params.queueItemId!, body,
+      );
+      res.status(result.ok ? 200 : 409).json(result);
+    } catch (err) {
+      res.status(500).json({ ok: false, error: { code: 'internal', message: String(err) } });
     }
   });
 

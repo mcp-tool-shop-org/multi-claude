@@ -1,0 +1,18 @@
+/* Starlight dark theme — blue accent (matches Multi-Claude logo) */
+:root {
+  --sl-color-accent-low: #1e1b4b;
+  --sl-color-accent: #3b82f6;
+  --sl-color-accent-high: #93c5fd;
+
+  --sl-color-bg: #09090b;
+  --sl-color-hairline: #27272a;
+
+  --sl-color-black: #09090b;
+  --sl-color-gray-1: #fafafa;
+  --sl-color-gray-2: #e4e4e7;
+  --sl-color-gray-3: #a1a1aa;
+  --sl-color-gray-4: #52525b;
+  --sl-color-gray-5: #27272a;
+  --sl-color-gray-6: #18181b;
+  --sl-color-gray-7: #09090b;
+}
