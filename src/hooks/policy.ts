@@ -1,6 +1,6 @@
 import type { HookEventPayload } from './events.js';
 import type { EvaluatedConditions } from './conditions.js';
-import type { HookAction, HookDecision } from './actions.js';
+import type { HookDecision } from './actions.js';
 import { makeDecision } from './actions.js';
 
 export const MAX_RETRIES = 3;

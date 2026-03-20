@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { openDb } from '../db/connection.js';
 import { mcfError, ERR } from '../lib/errors.js';
 import { isValidPacketId, generateId, nowISO } from '../lib/ids.js';
-import { isFeatureTerminal } from '../lib/transitions.js';
+
 import type { McfResult, PacketLayer, PacketRole, FeatureStatus } from '../types/common.js';
 
 export interface PacketDef {

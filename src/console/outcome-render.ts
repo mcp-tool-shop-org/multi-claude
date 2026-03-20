@@ -9,7 +9,6 @@
 import type {
   RunOutcome,
   PacketOutcome,
-  UnresolvedItem,
 } from '../types/outcome.js';
 
 // ── Constants ────────────────────────────────────────────────────────

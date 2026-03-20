@@ -199,8 +199,8 @@ function createWorktree(repoRoot: string, packetId: string): { worktreePath: str
   return { worktreePath, branchName };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-function cleanupWorktree(repoRoot: string, packetId: string): void {
+// cleanupWorktree reserved for future use — currently called externally
+export function cleanupWorktree(repoRoot: string, packetId: string): void {
   const branchName = `multi-claude/${packetId}`;
   const worktreePath = join(repoRoot, '.multi-claude', 'worktrees', packetId);
   try { execSync(`git worktree remove "${worktreePath}" --force`, { cwd: repoRoot, stdio: 'pipe' }); } catch { /* ignore */ }

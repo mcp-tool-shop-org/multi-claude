@@ -1,13 +1,5 @@
 import type Database from 'better-sqlite3';
 
-interface ActiveClaim {
-  claim_id: string;
-  packet_id: string;
-  claimed_by: string;
-  role: string;
-  feature_id: string;
-}
-
 /**
  * Check the role conflict matrix for a proposed claim.
  *

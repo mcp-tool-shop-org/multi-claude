@@ -22,7 +22,8 @@ export function evaluateRun(input: PlannerInput): RunPlan {
   const explanation = explainRecommendation(assessment);
 
   // suggestTemplate returns the template matching the work class (if any)
-  const _template = suggestTemplate(input.workClass);
+  // Template lookup reserved for future packet decomposition
+  suggestTemplate(input.workClass);
 
   return {
     id: generateId('plan'),

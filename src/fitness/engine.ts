@@ -8,17 +8,17 @@
  */
 
 import { openDb } from '../db/connection.js';
-import { generateId, nowISO } from '../lib/ids.js';
+import { nowISO } from '../lib/ids.js';
 // Metric registry available for future detailed scoring
 // import { METRIC_REGISTRY } from './metrics.js';
-import { SCORE_WEIGHTS, MATURATION, PACKET_CLASS_BUDGETS, type RunScore, type PacketFitness, type Penalty, type PacketClass } from './types.js';
+import { MATURATION, PACKET_CLASS_BUDGETS, type RunScore, type PacketFitness, type Penalty, type PacketClass } from './types.js';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 // ─── Duration scoring ───────────────────────────────────────────
 
 function scoreDuration(durationSec: number, packetClass: PacketClass): number {
-  const [budgetMin, budgetMax] = PACKET_CLASS_BUDGETS[packetClass];
+  const [, budgetMax] = PACKET_CLASS_BUDGETS[packetClass];
   if (durationSec <= budgetMax) return 1.0;
   const ceiling2x = budgetMax * 2;
   if (durationSec >= ceiling2x) return 0.0;
@@ -46,7 +46,8 @@ function computePacketScore(
   penalties: number,
 ): PacketFitness {
   const budget = PACKET_CLASS_BUDGETS[packetClass];
-  const durationScore = durationSec != null ? scoreDuration(durationSec, packetClass) : 0;
+  // Duration score computed for future weighted scoring
+  void (durationSec != null ? scoreDuration(durationSec, packetClass) : 0);
 
   // Base score (100 raw, then matured)
   let maturedPoints = 0;
@@ -129,10 +130,11 @@ export function scoreRun(dbPath: string, runId: string, featureId: string): RunS
     `).get(featureId) as { c: number };
 
     // Get state transitions for lawfulness
-    const totalTransitions = db.prepare(`
+    // Transition count queried for future lawfulness scoring
+    void db.prepare(`
       SELECT COUNT(*) as c FROM state_transition_log
       WHERE entity_id IN (SELECT packet_id FROM packets WHERE feature_id = ?)
-    `).get(featureId) as { c: number };
+    `).get(featureId);
 
     // Get hook decisions
     const hookDecisions = db.prepare(`

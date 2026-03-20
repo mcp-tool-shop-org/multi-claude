@@ -2,7 +2,7 @@ import { Command } from 'commander';
 import { openDb } from '../db/connection.js';
 import { mcfError, ERR } from '../lib/errors.js';
 import { isKebabCase, generateId, nowISO } from '../lib/ids.js';
-import { isValidFeatureTransition, isFeatureTerminal } from '../lib/transitions.js';
+import { isFeatureTerminal } from '../lib/transitions.js';
 import type { McfResult, FeatureStatus } from '../types/common.js';
 
 export interface FeatureCreateResult {

@@ -21,7 +21,6 @@ import type {
   UnresolvedItem,
   InterventionSummary,
   FollowUp,
-  FollowUpKind,
 } from '../types/outcome.js';
 import { queryRunModel } from './run-model.js';
 import { queryHookFeed } from './hook-feed.js';
