@@ -6,7 +6,7 @@ export const config: SiteConfig = {
   logoBadge: 'MC',
   brandName: 'Multi-Claude',
   repoUrl: 'https://github.com/mcp-tool-shop-org/multi-claude',
-  npmUrl: 'https://www.npmjs.com/package/@multi-claude/cli',
+  npmUrl: 'https://www.npmjs.com/package/@mcptoolshop/multi-claude',
   footerText: 'MIT Licensed — built by <a href="https://github.com/mcp-tool-shop-org" style="color:var(--color-muted);text-decoration:underline">mcp-tool-shop-org</a>',
 
   hero: {
@@ -17,7 +17,7 @@ export const config: SiteConfig = {
     primaryCta: { href: '#usage', label: 'Get started' },
     secondaryCta: { href: 'handbook/', label: 'Read the Handbook' },
     previews: [
-      { label: 'Install', code: 'npm install -g @multi-claude/cli' },
+      { label: 'Install', code: 'npm install -g @mcptoolshop/multi-claude' },
       { label: 'Plan', code: 'multi-claude plan evaluate --work-class backend_law --packets 6' },
       { label: 'Run', code: 'multi-claude run && multi-claude console watch' },
     ],
@@ -43,7 +43,7 @@ export const config: SiteConfig = {
       id: 'usage',
       title: 'Usage',
       cards: [
-        { title: 'Install', code: 'npm install -g @multi-claude/cli' },
+        { title: 'Install', code: 'npm install -g @mcptoolshop/multi-claude' },
         { title: 'Assess fitness', code: 'multi-claude plan evaluate \\\n  --work-class backend_law \\\n  --packets 6 \\\n  --coupling low' },
         { title: 'Build and run', code: 'multi-claude blueprint init --template backend_law\nmulti-claude blueprint validate\nmulti-claude blueprint freeze\nmulti-claude run' },
         { title: 'Monitor', code: 'multi-claude console watch\nmulti-claude console next\nmulti-claude monitor --port 3100' },

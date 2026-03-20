@@ -1,11 +1,16 @@
 {
-  "name": "@multi-claude/cli",
+  "name": "@mcptoolshop/multi-claude",
   "version": "1.0.0",
   "description": "Multi-Claude — lane-based parallel build system for Claude Code",
   "type": "module",
   "bin": {
     "multi-claude": "./dist/bin/multi-claude.js"
   },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
