@@ -106,7 +106,7 @@ function seedDeferredClaim(stores: ReturnType<typeof openAllStores>, queueItemId
     claimedAt: NOW,
     status: 'deferred',
     leaseExpiresAt: LATER,
-    deferredUntil: '2026-03-21T12:00:00Z',
+    deferredUntil: '2099-12-31T23:59:59Z',
     escalationTarget: null,
     lastReason: 'deferred',
     updatedAt: NOW,
