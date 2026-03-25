@@ -1,6 +1,6 @@
 {
   "name": "@mcptoolshop/multi-claude",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Multi-Claude — lane-based parallel build system for Claude Code",
   "type": "module",
   "bin": {

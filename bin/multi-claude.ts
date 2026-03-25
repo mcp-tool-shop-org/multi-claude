@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
 import { initCommand } from '../src/commands/init.js';
 import { featureCommand } from '../src/commands/feature.js';
@@ -21,12 +24,15 @@ import { blueprintCommand } from '../src/commands/blueprint.js';
 import { consoleCommand } from '../src/commands/console.js';
 import { handoffCommand } from '../src/handoff/cli/handoff-command.js';
 
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const pkg = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf-8'));
+
 const program = new Command();
 
 program
   .name('multi-claude')
   .description('Multi-Claude — lane-based parallel build system')
-  .version('0.1.0');
+  .version(pkg.version);
 
 program.addCommand(initCommand());
 program.addCommand(featureCommand());
