@@ -11,6 +11,30 @@ on:
       - 'package-lock.json'
       - 'tsconfig.json'
       - '.github/workflows/**'
+      - 'site/package.json'
+      - 'site/package-lock.json'
+      - 'site/astro.config.mjs'
+  # `ci (20)` and `ci (22)` are REQUIRED status checks on main, but no workflow
+  # in this repo had a pull_request trigger -- so the job ran on push, never on
+  # a PR head, and every pull request was unmergeable by construction with no
+  # failing check to point at. Found 2026-09-17 on the PR migrating site/ off
+  # an astro release that cannot hold the sharp patch.
+  #
+  # Mirrors the push filter plus the three site files that change what gets
+  # built or audited. Not `site/**`: prose edits should not spend CI minutes.
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'test/**'
+      - 'bin/**'
+      - 'apps/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tsconfig.json'
+      - '.github/workflows/**'
+      - 'site/package.json'
+      - 'site/package-lock.json'
+      - 'site/astro.config.mjs'
   workflow_dispatch:
 
 concurrency:
