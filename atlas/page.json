@@ -1,0 +1,256 @@
+{
+  "authored": [
+    ".claude/",
+    ".github/",
+    ".multi-claude/",
+    "docs/",
+    "reports/",
+    "root",
+    "site/"
+  ],
+  "breaks": [
+    {
+      "doors": 2,
+      "importedBy": [
+        "bin"
+      ],
+      "importedByTests": [
+        "test"
+      ],
+      "kind": "part",
+      "name": "src",
+      "partLabel": "src"
+    },
+    {
+      "doors": 2,
+      "importedBy": [],
+      "importedByTests": [],
+      "kind": "part",
+      "name": "bin",
+      "partLabel": "bin"
+    }
+  ],
+  "changes": {
+    "first": true
+  },
+  "changesTogether": [],
+  "changesTogetherNote": [
+    "Window: 180 days; a pair counts from 3 shared commits, since the window holds fewer than 30 qualifying commits."
+  ],
+  "changesTogetherWithTests": 0,
+  "commit": "9d36a213c2ce7852ec073000e429f67024f04601",
+  "defaultBranch": "main",
+  "derived": "11 parts, mostly TypeScript (328 files). Work enters through 3 doors; the busiest is CI, which reaches 3 parts. People run multi-claude.",
+  "doors": [
+    {
+      "checks": [
+        "bin/",
+        "src/"
+      ],
+      "checksCount": 2,
+      "file": ".github/workflows/ci.yml",
+      "id": ".github/workflows/ci.yml",
+      "landings": [],
+      "name": "CI",
+      "pushes": false,
+      "reach": [
+        {
+          "boundary": "bin",
+          "depth": 0,
+          "files": 1
+        },
+        {
+          "boundary": "src",
+          "depth": 0,
+          "files": 225
+        },
+        {
+          "boundary": "test",
+          "depth": 0,
+          "files": 71
+        }
+      ],
+      "runs": [
+        "test/claim.test.ts",
+        "test/commands/",
+        "test/console/",
+        "test/db.test.ts",
+        "test/e2e.test.ts",
+        "test/fitness/",
+        "test/handoff/adapter.test.ts",
+        "test/handoff/approval.test.ts",
+        "test/handoff/bridge.test.ts",
+        "test/handoff/calibration-law.test.ts",
+        "test/handoff/cas.test.ts",
+        "test/handoff/compose.test.ts",
+        "test/handoff/decision-brief.test.ts",
+        "test/handoff/decision-queue.test.ts",
+        "test/handoff/derive.test.ts",
+        "test/handoff/flow-control.test.ts",
+        "test/handoff/intervention-law.test.ts",
+        "test/handoff/invalidation.test.ts",
+        "test/handoff/outcome-ledger.test.ts",
+        "test/handoff/packet.test.ts",
+        "test/handoff/policy-control.test.ts",
+        "test/handoff/promotion-law.test.ts",
+        "test/handoff/recovery.test.ts",
+        "test/handoff/renderer.test.ts",
+        "test/handoff/routing-law.test.ts",
+        "test/handoff/store.test.ts",
+        "test/handoff/supervisor-loop.test.ts",
+        "test/hooks/",
+        "test/lifecycle.test.ts",
+        "test/monitor/",
+        "test/planner/",
+        "test/retry-recovery.test.ts",
+        "test/runtime/",
+        "test/schema/",
+        "test/submit.test.ts",
+        "test/transitions.test.ts",
+        "test/trials/trial-a.test.ts",
+        "test/trials/trial-b.test.ts",
+        "test/trials/trial-c.test.ts",
+        "test/trials/trial-synthesis.test.ts",
+        "test/types/",
+        "test/verify.test.ts"
+      ],
+      "runsCount": 42,
+      "sends": [],
+      "stages": [],
+      "triggers": [
+        "on a pull request touching 12 paths",
+        "on a push touching 12 paths",
+        "or by hand"
+      ]
+    },
+    {
+      "checks": [],
+      "checksCount": 0,
+      "file": ".github/workflows/pages.yml",
+      "id": ".github/workflows/pages.yml",
+      "landings": [],
+      "name": "Deploy site to GitHub Pages",
+      "pushes": false,
+      "reach": [
+        {
+          "boundary": "site",
+          "depth": 0,
+          "files": 3
+        }
+      ],
+      "runs": [
+        "site/astro.config.mjs",
+        "site/src/"
+      ],
+      "runsCount": 2,
+      "sends": [
+        "deploys the site"
+      ],
+      "stages": [],
+      "triggers": [
+        "on a push to main touching 2 paths",
+        "or by hand"
+      ]
+    },
+    {
+      "checks": [],
+      "checksCount": 0,
+      "file": "package.json",
+      "id": "package.json#multi-claude",
+      "kind": "command",
+      "landings": [],
+      "name": "multi-claude",
+      "programs": [
+        "git"
+      ],
+      "pushes": false,
+      "reach": [
+        {
+          "boundary": "bin",
+          "depth": 0,
+          "files": 1
+        },
+        {
+          "boundary": "src",
+          "depth": 1,
+          "files": 208
+        }
+      ],
+      "runs": [
+        "bin/multi-claude.ts"
+      ],
+      "runsCount": 1,
+      "sends": [],
+      "stages": [],
+      "triggers": []
+    }
+  ],
+  "duplicates": [],
+  "duplicatesLead": null,
+  "duplicatesNote": [],
+  "edges": [
+    {
+      "from": "bin",
+      "fromTests": false,
+      "to": "src"
+    }
+  ],
+  "generated": [],
+  "generatedAt": "2026-09-24T08:46:45.768Z",
+  "limits": [
+    "3 writes and 5 reads use paths built at run time and are not named here.",
+    "2 writes go to places this repository does not track, so they are not listed as generated.",
+    "3 writes and 129 reads go to the directory the command is run in, the home directory or a path its caller passes, not to this repository.",
+    "1 command is built at run time and not followed.",
+    "Statistics confidence is low: fewer than 30 qualifying commits in the window, and fewer than 20 source files reach 10 revisions."
+  ],
+  "mainDoor": ".github/workflows/ci.yml",
+  "partLabels": {
+    ".claude": ".claude",
+    ".github": ".github",
+    ".multi-claude": ".multi-claude",
+    "bin": "bin",
+    "control-plane-monitor": "control-plane-monitor",
+    "docs": "docs",
+    "reports": "reports",
+    "root": "the repository root",
+    "site": "the site",
+    "src": "src",
+    "test": "test"
+  },
+  "parts": 11,
+  "readers": [],
+  "repo": "mcp-tool-shop-org/multi-claude",
+  "sequences": [],
+  "startDoor": ".github/workflows/ci.yml",
+  "startHere": [
+    ".github/workflows/ci.yml",
+    "src/commands/claim.ts"
+  ],
+  "summary": null,
+  "summaryFrom": null,
+  "testFiles": 74,
+  "testedBy": {
+    "bin": 0,
+    "control-plane-monitor": 0,
+    "src": 72
+  },
+  "unnamedWrites": 3,
+  "unread": [],
+  "unreadFiles": 0,
+  "unreadNote": [],
+  "untested": [
+    {
+      "part": "bin",
+      "partLabel": "bin",
+      "testedBy": 0
+    },
+    {
+      "part": "control-plane-monitor",
+      "partLabel": "control-plane-monitor",
+      "testedBy": 0
+    }
+  ],
+  "untestedNote": [],
+  "written": 0
+}
