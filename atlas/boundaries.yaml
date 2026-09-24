@@ -1,0 +1,46 @@
+summary: ""
+boundaries:
+  - name: .claude
+    globs:
+      - .claude/**
+    role: docs
+  - name: .github
+    globs:
+      - .github/**
+    role: config
+  - name: .multi-claude
+    globs:
+      - .multi-claude/**
+    role: docs
+  - name: bin
+    globs:
+      - bin/**
+    role: code
+  - name: control-plane-monitor
+    globs:
+      - apps/control-plane-monitor/**
+    role: code
+  - name: docs
+    globs:
+      - docs/**
+    role: docs
+  - name: reports
+    globs:
+      - reports/**
+    role: docs
+  - name: root
+    globs:
+      - "*"
+    role: config
+  - name: site
+    globs:
+      - site/**
+    role: site
+  - name: src
+    globs:
+      - src/**
+    role: code
+  - name: test
+    globs:
+      - test/**
+    role: test
