@@ -34,60 +34,29 @@
   ],
   "changes": {
     "fileCounts": {
-      "added": 1,
-      "changed": 472,
+      "added": 0,
+      "changed": 2,
       "moved": 0,
-      "parts": 11,
+      "parts": 2,
       "removed": 0
     },
     "items": [
       {
         "kind": "door",
-        "sentence": "CI's pull request trigger now also names `codecov.yml`.",
+        "sentence": "CI's pull request trigger no longer names `.github/workflows/**`, `apps/**`, `atlas/**`, `bin/**`, `codecov.yml`, `package-lock.json`, `package.json`, `site/astro.config.mjs`, `site/package-lock.json`, `site/package.json`, `src/**`, `test/**` and `tsconfig.json`.",
         "subjects": [
           ".github/workflows/ci.yml"
-        ]
-      },
-      {
-        "kind": "door",
-        "sentence": "CI's push trigger now also names `codecov.yml`.",
-        "subjects": [
-          ".github/workflows/ci.yml"
-        ]
-      },
-      {
-        "kind": "landing",
-        "sentence": ".multi-claude/drill/drill-report.json is now written by test/drill/stop-drill.ts.",
-        "subjects": [
-          ".multi-claude/drill/drill-report.json",
-          "test/drill/stop-drill.ts"
-        ]
-      },
-      {
-        "kind": "landing",
-        "sentence": ".multi-claude/workers is now written by src/commands/auto.ts and src/runtime/sdk-runtime.ts.",
-        "subjects": [
-          ".multi-claude/workers",
-          "src/commands/auto.ts",
-          "src/runtime/sdk-runtime.ts"
-        ]
-      },
-      {
-        "kind": "origin",
-        "sentence": ".multi-claude was authored and is now mixed.",
-        "subjects": [
-          ".multi-claude"
         ]
       },
       {
         "kind": "counts",
-        "sentence": "1 file added and 472 changed content, across 11 parts.",
+        "sentence": "2 files changed content, across 2 parts.",
         "subjects": []
       }
     ],
     "since": {
-      "commit": "9d36a213c2ce7852ec073000e429f67024f04601",
-      "generatedAt": "2026-09-24T08:46:45.768Z"
+      "commit": "bed1180e3d025ed604afbe1a75c20d18de49848a",
+      "generatedAt": "2026-09-30T20:10:50.512Z"
     },
     "unchanged": false
   },
@@ -96,7 +65,7 @@
     "Window: 180 days; a pair counts from 3 shared commits, since the window holds fewer than 30 qualifying commits."
   ],
   "changesTogetherWithTests": 0,
-  "commit": "bed1180e3d025ed604afbe1a75c20d18de49848a",
+  "commit": "5f00fa1b34c9c114b317d638eaedd0cc3d5ca207",
   "defaultBranch": "main",
   "derived": "11 parts, mostly TypeScript (328 files), CSS (3), JavaScript (3), Astro (1) and HTML (1). Work enters through 3 doors; the busiest is CI, which reaches 3 parts. It deploys a site to GitHub Pages. People run multi-claude.",
   "doors": [
@@ -181,7 +150,7 @@
       ],
       "stages": [],
       "triggers": [
-        "on a pull request touching 13 paths",
+        "on a pull request",
         "on a push touching 13 paths",
         "or by hand"
       ]
@@ -273,7 +242,7 @@
       ]
     }
   ],
-  "generatedAt": "2026-09-30T20:10:50.512Z",
+  "generatedAt": "2026-10-01T02:13:22.978Z",
   "limits": [
     "3 writes and 5 reads use paths built at run time and are not named here.",
     "3 writes go to places this repository does not track, so they are not listed as generated.",
