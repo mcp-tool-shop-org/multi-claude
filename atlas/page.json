@@ -42,30 +42,23 @@
     },
     "items": [
       {
-        "kind": "door",
-        "sentence": "CI's pull request trigger no longer names `.github/workflows/**`, `apps/**`, `atlas/**`, `bin/**`, `codecov.yml`, `package-lock.json`, `package.json`, `site/astro.config.mjs`, `site/package-lock.json`, `site/package.json`, `src/**`, `test/**` and `tsconfig.json`.",
-        "subjects": [
-          ".github/workflows/ci.yml"
-        ]
-      },
-      {
         "kind": "counts",
-        "sentence": "2 files changed content, across 2 parts.",
+        "sentence": "Nothing structural changed since 2026-10-01; 2 files changed content.",
         "subjects": []
       }
     ],
     "since": {
-      "commit": "bed1180e3d025ed604afbe1a75c20d18de49848a",
-      "generatedAt": "2026-09-30T20:10:50.512Z"
+      "commit": "5f00fa1b34c9c114b317d638eaedd0cc3d5ca207",
+      "generatedAt": "2026-10-01T02:13:22.978Z"
     },
-    "unchanged": false
+    "unchanged": true
   },
   "changesTogether": [],
   "changesTogetherNote": [
     "Window: 180 days; a pair counts from 3 shared commits, since the window holds fewer than 30 qualifying commits."
   ],
   "changesTogetherWithTests": 0,
-  "commit": "5f00fa1b34c9c114b317d638eaedd0cc3d5ca207",
+  "commit": "4c5b11e9ef10b3db706c54cd1b96a4cbe74d522e",
   "defaultBranch": "main",
   "derived": "11 parts, mostly TypeScript (328 files), CSS (3), JavaScript (3), Astro (1) and HTML (1). Work enters through 3 doors; the busiest is CI, which reaches 3 parts. It deploys a site to GitHub Pages. People run multi-claude.",
   "doors": [
@@ -232,7 +225,7 @@
       "to": "src"
     }
   ],
-  "engine": "1.24.0",
+  "engine": "1.26.0",
   "generated": [
     {
       "fromRoot": true,
@@ -242,7 +235,7 @@
       ]
     }
   ],
-  "generatedAt": "2026-10-01T02:13:22.978Z",
+  "generatedAt": "2026-11-11T22:25:52.996Z",
   "limits": [
     "3 writes and 5 reads use paths built at run time and are not named here.",
     "3 writes go to places this repository does not track, so they are not listed as generated.",
@@ -282,6 +275,7 @@
     "control-plane-monitor": 0,
     "src": 72
   },
+  "testedCodeParts": 3,
   "unnamedWrites": 3,
   "unread": [
     {

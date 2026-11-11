@@ -1,15 +1,14 @@
 # multi-claude: how it works
 
-Mapped at 2026-10-01 from commit 5f00fa1 by Atlas 1.24.0.
+Mapped at 2026-11-11 from commit 4c5b11e by Atlas 1.26.0.
 
 ## What this is
 
 11 parts, mostly TypeScript (328 files), CSS (3), JavaScript (3), Astro (1) and HTML (1). Work enters through 3 doors; the busiest is CI, which reaches 3 parts. It deploys a site to GitHub Pages. People run multi-claude.
 
-## What changed since 2026-09-30 (bed1180)
+## What changed since 2026-10-01 (5f00fa1)
 
-- CI's pull request trigger no longer names `.github/workflows/**`, `apps/**`, `atlas/**`, `bin/**`, `codecov.yml`, `package-lock.json`, `package.json`, `site/astro.config.mjs`, `site/package-lock.json`, `site/package.json`, `src/**`, `test/**` and `tsconfig.json`.
-- 2 files changed content, across 2 parts.
+Nothing structural changed since 2026-10-01; 2 files changed content.
 
 ## What comes in
 
